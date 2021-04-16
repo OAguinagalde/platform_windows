@@ -10,33 +10,6 @@
 // A define for me to know what things are win specific and what things are not
 #define win32_ 
 
-#if 0
-void renderer_initialize() {
-    int renderer_maxQuadCount = 10000;
-    // 2position 4color 2textuv
-    int vertex_elementCount = 8;
-    // 8 floats per vertex * 4 vertex per quad * max ammount of quads
-    float* renderer_vertexBuffer = malloc(sizeof(float)*vertex_elementCount*4*renderer_maxQuadCount);
-    assert(renderer_vertexBuffer);
-    // 6 indices per quad * max ammount of quads
-    int *renderer_indexBuffer = malloc(sizeof(int)*6*renderer_maxQuadCount);
-    assert(renderer_indexBuffer);
-    
-    // Populate the index buffer
-    int vertices = 0;
-    int indices = 0;
-    for (int i = 0; i < renderer_maxQuadCount; i++) {
-        vertices = i * 4;
-        indices = i * 6;
-        renderer_indexBuffer[indices + 0] = vertices + 0;
-        renderer_indexBuffer[indices + 1] = vertices + 1;
-        renderer_indexBuffer[indices + 2] = vertices + 2;
-        renderer_indexBuffer[indices + 3] = vertices + 0;
-        renderer_indexBuffer[indices + 4] = vertices + 2;
-        renderer_indexBuffer[indices + 5] = vertices + 3;
-    }
-
-
 void win32_print(const char* string) {
     static int initialize = 0;
     static win32_ HANDLE win32_console_stdout = 0;
@@ -65,6 +38,7 @@ void opengl_getErrors(void) {
     }
 }
 #define opengl_getErrorsAt(call) win32_print(call);win32_print("\n");opengl_getErrors();
+
 // https://www.khronos.org/opengl/wiki/Load_OpenGL_Functions
 void* opengl_getFunctionAddress(const char* functionName) {
     void* function = (void*) win32_ wglGetProcAddress(functionName);
@@ -223,7 +197,7 @@ win32_ int WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, char* win32_cmd
     win32_ MSG win32_msg = (MSG) {0};
     win32_ BOOL win32_returnValue;
 
-    while(win32_returnValue = win32_ GetMessage(&win32_msg, NULL, 0, 0) != 0)
+    while((win32_returnValue = win32_ GetMessage(&win32_msg, NULL, 0, 0)) != 0)
     { 
         if (win32_returnValue == -1)
         {
