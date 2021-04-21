@@ -1,4 +1,8 @@
-# Working with the windows platform
+# Windows platform layer
+
+Figuring out the windows platform layer.
+
+## Building
 
 Building is strightforward since there is no dependencys other than the windows provided libraries and APIs.
 
