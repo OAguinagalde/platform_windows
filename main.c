@@ -9,6 +9,31 @@
 #include "resources.h"
 // A define for me to know what things are win specific and what things are not
 #define win32_ 
+typedef long long int64;
+typedef unsigned long long uint64;
+
+void win32_clearConsole() {
+    static int initialize = 0;
+    static win32_ HANDLE win32_console_stdout = 0;
+    // To also clear the scroll back, emit L"\x1b[3J" as well.
+    // 2J only clears the visible window and 3J only clears the scroll back.
+    static win32_ PCWSTR win32_clearConsoleSequence = L"\x1b[2J";
+    static win32_ DWORD win32_originalMode = 0;
+    if (initialize == 0) {
+        win32_console_stdout = win32_ GetStdHandle(STD_OUTPUT_HANDLE);
+        // First we have to activate the virtual terminal processing for this to work
+        DWORD mode = 0;
+        win32_ GetConsoleMode(win32_console_stdout, &mode);
+        // We might want to keep the original mode to restore it if necessary. For example when using with other command lines utilities...
+        win32_originalMode = mode;
+        // restore original mode
+        // win32_ SetConsoleMode(hStdOut, originalMode);
+        mode |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
+        win32_ SetConsoleMode(win32_console_stdout, mode);
+        initialize++;
+    }
+    win32_ WriteConsoleW(win32_console_stdout, win32_clearConsoleSequence, sizeof(win32_clearConsoleSequence)/sizeof((win32_clearConsoleSequence)[0]), NULL, NULL);
+}
 
 void win32_print(const char* string) {
     static int initialize = 0;
