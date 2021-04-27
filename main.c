@@ -46,6 +46,15 @@ void win32_print(const char* string) {
     // TODO: make win32_ OutputDebugString() output to my STD_OUTPUT_HANDLE
 }
 
+void win32_printf(const char* format, ...) {
+    static char buffer[1024];
+    va_list args;
+    va_start(args, format);
+    win32_ wvsprintf((LPSTR) &buffer, format, args);
+    va_end(args);
+    win32_print(&buffer[0]);
+}
+
 void opengl_getErrors(void) {
     GLenum opengl_error = 0;
     while ((opengl_error = glGetError()) != GL_NO_ERROR) {
@@ -116,17 +125,34 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
     switch (uMsg)
     {
         case WM_SIZE: {
-            UINT width = LOWORD(lParam);
-            UINT height = HIWORD(lParam);
+            RECT win32_rect;
+            // This just gives us the "drawable" part of the window
+            win32_ GetClientRect(hwnd, &win32_rect);
+            int width = win32_rect.right - win32_rect.left;
+            int height = win32_rect.bottom - win32_rect.top;
+            win32_printf("WIDTH: %d, height: %d\n", width, height);
+            
+            // UINT width = LOWORD(lParam);
+            // UINT height = HIWORD(lParam);
         } break;
         case WM_DESTROY: {
-            PostQuitMessage(0);
+            win32_print("WM_DESTROY\n");
+        } // break;
+        win32_print("and\n");
+        case WM_CLOSE: {
+            win32_print("WM_CLOSE\n");
+            // Basically makes the application post a WM_QUIT message
+            win32_ PostQuitMessage(0);
         } break;
-
+        case WM_PAINT: {
+            win32_print("WM_PAINT\n");
+        } break;
         case WM_SYSKEYDOWN:
         case WM_KEYDOWN: {
             if (wParam == VK_ESCAPE) {
-                DestroyWindow(hwnd);
+                // TODO: There is too many points where I want to quite the application... Which one does what?
+                win32_ PostQuitMessage(0);
+                win32_ DestroyWindow(hwnd);
             }
             return 0;
         } break;
@@ -225,7 +251,7 @@ win32_ int WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, char* win32_cmd
     // win32_ Start timers/counters
     uint64 win32_frequency_seconds;
     uint64 win32_counter_start;
-    uint64 win32_counter_lastFrame;
+    uint64 win32_counter_lastFrame, win32_counter_lastUpdate;
     {
         LARGE_INTEGER win32_counter;
         win32_ QueryPerformanceCounter(&win32_counter);
@@ -244,12 +270,13 @@ win32_ int WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, char* win32_cmd
         // uint64 cyclecount = __rdtsc();
     }
     win32_counter_lastFrame = win32_counter_start;
+    win32_counter_lastUpdate = win32_counter_start;
 
     win32_ MSG win32_msg = (MSG) {0};
     win32_ BOOL win32_returnValue;
 
     while((win32_returnValue = win32_ GetMessage(&win32_msg, NULL, 0, 0)) != 0)
-    { 
+    {
         if (win32_returnValue == -1)
         {
             win32_ LPTSTR win32_errorMessage = NULL;
@@ -282,6 +309,18 @@ win32_ int WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, char* win32_cmd
 
             // logic or something
             {
+                uint64 ms_sinceLastUpdate = 0;
+                // Get time since last update
+                {
+                    // Internal Counter at this point
+                    LARGE_INTEGER win32_counter;
+                    win32_ QueryPerformanceCounter(&win32_counter);
+                    // Difference since last update to this new update
+                    uint64 win32_counterDifference_lastUpdate = win32_counter.QuadPart - win32_counter_lastUpdate;
+                    // Since we know the frequency we can calculate some times
+                    ms_sinceLastUpdate = 1000 * win32_counterDifference_lastUpdate / win32_frequency_seconds;
+                    win32_counter_lastUpdate = win32_counter.QuadPart;
+                }
                 win32_clearConsole();
                 win32_print("__ frame __\n");
 
@@ -290,20 +329,64 @@ win32_ int WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, char* win32_cmd
                 if (win32_result) {
                     int win32_clientRectangleWidth = win32_clientRectangle.right;
                     int win32_clientRectangleHeight = win32_clientRectangle.bottom;
-                    char buffer[256];
-                    win32_ wsprintf((LPSTR) &buffer, "win32_clientRectangleWidth: %d\n", win32_clientRectangleWidth);
-                    win32_print(&buffer[0]);
-                    win32_ wsprintf((LPSTR) &buffer, "win32_clientRectangleHeight: %d\n", win32_clientRectangleHeight);
-                    win32_print(&buffer[0]);
+                    win32_printf("win32_clientRectangleWidth: %d\n", win32_clientRectangleWidth);
+                    win32_printf("win32_clientRectangleHeight: %d\n", win32_clientRectangleHeight);
+                    // Current position of image
+                    int x0, y0;
+                    x0 = vertices[3*9 + 0];
+                    y0 = vertices[3*9 + 1];
+                    float velocity;
+                    static int directionx = 1;
+                    static int directiony = 1;
+                    velocity = (float)ms_sinceLastUpdate * (1.0f/16.0f);
+                    if ((float)x0/(float)win32_clientRectangleWidth > 0.9f) {
+                        directionx = -directionx;
+                    }
+                    if ((float)x0/(float)win32_clientRectangleWidth < 0.1f) {
+                        directionx = -directionx;
+                    }
+                    if ((float)y0/(float)win32_clientRectangleHeight > 0.9f) {
+                        directiony = -directiony;
+                    }
+                    if ((float)y0/(float)win32_clientRectangleHeight < 0.1f) {
+                        directiony = -directiony;
+                    }
 
-                    float new_vertices[] = {
-                        // Positionx3, Colorx4 (RGBA), Texturex2 (UV)
-                        /*Positions...*/ 0*win32_windowWidth + win32_windowWidth*0.1f, 1*win32_windowHeight - win32_windowHeight*0.1f, 0.0f, /*Colors...*/ 1, 1, 1, 1, /*Textures...*/ 0, 1,
-                        /*Positions...*/ 1*win32_windowWidth - win32_windowWidth*0.1f, 1*win32_windowHeight - win32_windowHeight*0.1f, 0.0f, /*Colors...*/ 1, 1, 1, 1, /*Textures...*/ 1, 1,
-                        /*Positions...*/ 1*win32_windowWidth - win32_windowWidth*0.1f, 0*win32_windowHeight + win32_windowHeight*0.1f, 0.0f, /*Colors...*/ 1, 1, 1, 1, /*Textures...*/ 1, 0,
-                        /*Positions...*/ 0*win32_windowWidth + win32_windowWidth*0.1f, 0*win32_windowHeight + win32_windowHeight*0.1f, 0.0f, /*Colors...*/ 1, 1, 1, 1, /*Textures...*/ 0, 0,
-                    };
-                    memcpy((void*)&vertices[0], &new_vertices[0], sizeof(float)*9*4);
+                    x0 += velocity * directionx;
+                    y0 += velocity * directiony;
+
+                    // float new_vertices[] = {
+                    //     // Positionx3, Colorx4 (RGBA), Texturex2 (UV)
+                    //     /*Positions...*/ 0*win32_windowWidth + win32_windowWidth*0.1f, 1*win32_windowHeight - win32_windowHeight*0.1f, 0.0f, /*Colors...*/ 1, 1, 1, 1, /*Textures...*/ 0, 1,
+                    //     /*Positions...*/ 1*win32_windowWidth - win32_windowWidth*0.1f, 1*win32_windowHeight - win32_windowHeight*0.1f, 0.0f, /*Colors...*/ 1, 1, 1, 1, /*Textures...*/ 1, 1,
+                    //     /*Positions...*/ 1*win32_windowWidth - win32_windowWidth*0.1f, 0*win32_windowHeight + win32_windowHeight*0.1f, 0.0f, /*Colors...*/ 1, 1, 1, 1, /*Textures...*/ 1, 0,
+                    //     /*Positions...*/ 0*win32_windowWidth + win32_windowWidth*0.1f, 0*win32_windowHeight + win32_windowHeight*0.1f, 0.0f, /*Colors...*/ 1, 1, 1, 1, /*Textures...*/ 0, 0,
+                    // };
+                    // Velocity of 10 pixels per second
+                    vertices[0*9 + 0] += velocity * directionx;
+                    vertices[0*9 + 1] += velocity * directiony;
+
+                    vertices[1*9 + 0] += velocity * directionx;
+                    vertices[1*9 + 1] += velocity * directiony;
+                    
+                    vertices[2*9 + 0] += velocity * directionx;
+                    vertices[2*9 + 1] += velocity * directiony;
+                    
+                    vertices[3*9 + 0] += velocity * directionx;
+                    vertices[3*9 + 1] += velocity * directiony;
+                    
+                    // vertices[0*9 + 0] += x0;
+                    // vertices[0*9 + 1] += y0;
+
+                    // vertices[1*9 + 0] += x0;
+                    // vertices[1*9 + 1] += y0;
+                    
+                    // vertices[2*9 + 0] += x0;
+                    // vertices[2*9 + 1] += y0;
+                    
+                    // vertices[3*9 + 0] += x0;
+                    // vertices[3*9 + 1] += y0;
+                    // win32_ memcpy((void*)&vertices[0], &new_vertices[0], sizeof(float)*9*4);
                 }
             }
             // Rendering stuff
@@ -384,7 +467,7 @@ win32_ int WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, char* win32_cmd
                 glEnd();
                 glBindTexture(GL_TEXTURE_2D, 0);
 
-                SwapBuffers(win32_DeviceContextHandle);
+                win32_ SwapBuffers(win32_DeviceContextHandle);
                 // opengl_getErrorsAt("[glerrors] After frame...");
 
                 
@@ -403,13 +486,9 @@ win32_ int WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, char* win32_cmd
                 uint64 s_sinceProgramStart = win32_counterDifference_start / win32_frequency_seconds;
                 int fps = win32_frequency_seconds / win32_counterDifference_lastFrame;
 
-                char buffer[256];
-                win32_ wsprintf((LPSTR) &buffer, "ms_sinceLastFrame:   %lu\n", ms_sinceLastFrame);
-                win32_print(&buffer[0]);
-                win32_ wsprintf((LPSTR) &buffer, "s_sinceProgramStart: %lu\n", s_sinceProgramStart);
-                win32_print(&buffer[0]);
-                win32_ wsprintf((LPSTR) &buffer, "FPS:                 %d\n", fps);
-                win32_print(&buffer[0]);
+                win32_printf("ms_sinceLastFrame:   %lu\n", ms_sinceLastFrame);
+                win32_printf("s_sinceProgramStart: %lu\n", s_sinceProgramStart);
+                win32_printf("FPS:                 %d\n", fps);
 
                 win32_counter_lastFrame = win32_counter.QuadPart;
             }
@@ -420,7 +499,8 @@ win32_ int WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, char* win32_cmd
     {
         glDeleteTextures(1, &opengl_texture);
     }
-
+    // Technically windows will get rid of everything anyway so maybe closing stuff is not really necessary and might just slow down the process of finising our application?
+    // https://hero.handmade.network/episode/code/day003/
     win32_ FreeConsole();
     return 0;
 }
