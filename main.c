@@ -149,8 +149,11 @@ win32_ int WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, char* win32_cmd
     // Create the window
     const int win32_windowWidth = 500;
     const int win32_windowHeight = 2*300;
+    // TODO: Figure out how to control the drawing area of the window...
+    // WS_POPUP is the only way so far to keep it at a controllable area.
     // (WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX)
-    win32_ HWND win32_windowHandle = win32_ CreateWindowEx(0, win32_windowClassName, "Window Text", WS_POPUP,
+    // WS_POPUP
+    win32_ HWND win32_windowHandle = win32_ CreateWindowEx(0, win32_windowClassName, "Window Text", WS_POPUP | WS_OVERLAPPED | WS_THICKFRAME | WS_CAPTION,
         100, 100, win32_windowWidth, win32_windowHeight,
         NULL, NULL, hInstance, NULL
     );
@@ -219,6 +222,29 @@ win32_ int WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, char* win32_cmd
     
     win32_ ShowWindow(win32_windowHandle, nCmdShow);
 
+    // win32_ Start timers/counters
+    uint64 win32_frequency_seconds;
+    uint64 win32_counter_start;
+    uint64 win32_counter_lastFrame;
+    {
+        LARGE_INTEGER win32_counter;
+        win32_ QueryPerformanceCounter(&win32_counter);
+        // Internal Counter at this point
+        win32_counter_start = win32_counter.QuadPart;
+        // The internal counter alone is not enough to know how much time has passed.
+        // However, we can query the system for the performance of the cpu, which tells us how many cycles happen per second
+        // and with that calculate the time.
+        LARGE_INTEGER win32_performanceFrequency;
+        win32_ QueryPerformanceFrequency(&win32_performanceFrequency);
+        // Cycles per second
+        win32_frequency_seconds = win32_performanceFrequency.QuadPart;
+
+        // TODO: There is some other ways of getting performance information such as __rdtsc()...
+        // I should try it since (I think) might be more precise, since it is an intrinsic function from the compiler?
+        // uint64 cyclecount = __rdtsc();
+    }
+    win32_counter_lastFrame = win32_counter_start;
+
     win32_ MSG win32_msg = (MSG) {0};
     win32_ BOOL win32_returnValue;
 
@@ -248,14 +274,38 @@ win32_ int WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, char* win32_cmd
             else {
                 win32_ OutputDebugString("Error on GetMessage. FormatMessage failed.");
             }
-            
-
         }
         else
         {
             TranslateMessage(&win32_msg); 
             DispatchMessage(&win32_msg);
 
+            // logic or something
+            {
+                win32_clearConsole();
+                win32_print("__ frame __\n");
+
+                RECT win32_clientRectangle = (RECT) {0};
+                BOOL win32_result = win32_ GetClientRect(win32_windowHandle, &win32_clientRectangle);
+                if (win32_result) {
+                    int win32_clientRectangleWidth = win32_clientRectangle.right;
+                    int win32_clientRectangleHeight = win32_clientRectangle.bottom;
+                    char buffer[256];
+                    win32_ wsprintf((LPSTR) &buffer, "win32_clientRectangleWidth: %d\n", win32_clientRectangleWidth);
+                    win32_print(&buffer[0]);
+                    win32_ wsprintf((LPSTR) &buffer, "win32_clientRectangleHeight: %d\n", win32_clientRectangleHeight);
+                    win32_print(&buffer[0]);
+
+                    float new_vertices[] = {
+                        // Positionx3, Colorx4 (RGBA), Texturex2 (UV)
+                        /*Positions...*/ 0*win32_windowWidth + win32_windowWidth*0.1f, 1*win32_windowHeight - win32_windowHeight*0.1f, 0.0f, /*Colors...*/ 1, 1, 1, 1, /*Textures...*/ 0, 1,
+                        /*Positions...*/ 1*win32_windowWidth - win32_windowWidth*0.1f, 1*win32_windowHeight - win32_windowHeight*0.1f, 0.0f, /*Colors...*/ 1, 1, 1, 1, /*Textures...*/ 1, 1,
+                        /*Positions...*/ 1*win32_windowWidth - win32_windowWidth*0.1f, 0*win32_windowHeight + win32_windowHeight*0.1f, 0.0f, /*Colors...*/ 1, 1, 1, 1, /*Textures...*/ 1, 0,
+                        /*Positions...*/ 0*win32_windowWidth + win32_windowWidth*0.1f, 0*win32_windowHeight + win32_windowHeight*0.1f, 0.0f, /*Colors...*/ 1, 1, 1, 1, /*Textures...*/ 0, 0,
+                    };
+                    memcpy((void*)&vertices[0], &new_vertices[0], sizeof(float)*9*4);
+                }
+            }
             // Rendering stuff
             {
                 glViewport(0, 0, win32_windowWidth, win32_windowHeight);
@@ -321,11 +371,11 @@ win32_ int WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, char* win32_cmd
                     glVertex3f(vertices[(current_vertex*9)+0],vertices[(current_vertex*9)+1],vertices[(current_vertex*9)+2]);
                 }
                 glColor3f(1,0,0);
-                glVertex3f(0*win32_windowWidth,1*win32_windowHeight,0);
+                glVertex3f(0*win32_windowWidth/10.0f,0*win32_windowHeight/10.0f,0);
                 glColor3f(0,1,0);
-                glVertex3f(1*win32_windowWidth,1*win32_windowHeight,0);
+                glVertex3f(2*win32_windowWidth/10.0f,1*win32_windowHeight/10.0f,0);
                 glColor3f(0,0,1);
-                glVertex3f(0,0,0);
+                glVertex3f(1*win32_windowWidth/10.0f,4*win32_windowHeight/10.0f,0);
 
                 // glColor3f(0,1,0);
                 // glVertex3f(0,200,0);
@@ -335,7 +385,33 @@ win32_ int WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, char* win32_cmd
                 glBindTexture(GL_TEXTURE_2D, 0);
 
                 SwapBuffers(win32_DeviceContextHandle);
-                opengl_getErrorsAt("[glerrors] After frame...");
+                // opengl_getErrorsAt("[glerrors] After frame...");
+
+                
+            }
+            // Times and stuff
+            {
+                LARGE_INTEGER win32_counter;
+                win32_ QueryPerformanceCounter(&win32_counter);
+                // Internal Counter at this point
+                // The difference in the counter at the start of the program and right now.
+                uint64 win32_counterDifference_start = win32_counter.QuadPart - win32_counter_start;
+                uint64 win32_counterDifference_lastFrame = win32_counter.QuadPart - win32_counter_lastFrame;
+
+                // Since we know the frequency we can calculate some times
+                uint64 ms_sinceLastFrame = 1000 * win32_counterDifference_lastFrame / win32_frequency_seconds;
+                uint64 s_sinceProgramStart = win32_counterDifference_start / win32_frequency_seconds;
+                int fps = win32_frequency_seconds / win32_counterDifference_lastFrame;
+
+                char buffer[256];
+                win32_ wsprintf((LPSTR) &buffer, "ms_sinceLastFrame:   %lu\n", ms_sinceLastFrame);
+                win32_print(&buffer[0]);
+                win32_ wsprintf((LPSTR) &buffer, "s_sinceProgramStart: %lu\n", s_sinceProgramStart);
+                win32_print(&buffer[0]);
+                win32_ wsprintf((LPSTR) &buffer, "FPS:                 %d\n", fps);
+                win32_print(&buffer[0]);
+
+                win32_counter_lastFrame = win32_counter.QuadPart;
             }
         }
     }
