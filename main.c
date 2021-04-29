@@ -9,8 +9,16 @@
 #include "resources.h"
 // A define for me to know what things are win specific and what things are not
 #define win32_ 
+#define dontcare_ 
+typedef int bool;
+#define true (1)
+#define false (0)
 typedef long long int64;
 typedef unsigned long long uint64;
+
+int abs(int value) {
+    return (value < 0) ? -value : value;
+}
 
 void win32_clearConsole() {
     static int initialize = 0;
@@ -71,7 +79,30 @@ void opengl_getErrors(void) {
         }
     }
 }
-#define opengl_getErrorsAt(call) win32_print(call);win32_print("\n");opengl_getErrors();
+#define opengl_getErrorsAt(call) win32_printf("%s\n",call); opengl_getErrors();
+
+void win32_getWindowSizeAndPosition(HWND win32_windowHandle, int* width, int* height, int* x, int* y, bool printDebug) {
+    RECT win32_rect = (RECT) {0};
+    win32_ GetWindowRect(win32_windowHandle, &win32_rect);
+    *x = win32_rect.left;
+    *y = win32_rect.top;
+    *width = win32_rect.right - win32_rect.left;
+    *height = win32_rect.bottom - win32_rect.top;
+    if (printDebug) {
+        win32_printf("win32_getWindowSizeAndPosition: at %d,%d with size {%d} {%d}\n", *x, *y, *width, *height);
+    }
+}
+
+void win32_getClientSize(HWND win32_windowHandle, int* width, int* height, bool printDebug) {
+    RECT win32_rect = (RECT) {0};
+    // This just gives us the "drawable" part of the window
+    win32_ GetClientRect(win32_windowHandle, &win32_rect);
+    *width = win32_rect.right - win32_rect.left;
+    *height = win32_rect.bottom - win32_rect.top;
+    if (printDebug) {
+        win32_printf("win32_getClientSize: {%d} {%d}\n", *width, *height);
+    }
+}
 
 // https://www.khronos.org/opengl/wiki/Load_OpenGL_Functions
 void* opengl_getFunctionAddress(const char* functionName) {
@@ -83,7 +114,6 @@ void* opengl_getFunctionAddress(const char* functionName) {
         HMODULE module = win32_ LoadLibraryA("opengl32.dll");
         function = (void*) win32_ GetProcAddress(module, functionName);
     }
-
     return function;
 }
 
@@ -174,46 +204,40 @@ win32_ int WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, char* win32_cmd
     win32_ RegisterClass(&win32_windowClass);
 
     // Create the window
-    // This will create a window this size, but the drawable size won't be this
-    const int win32_windowsPositonX_initial = 100;
-    const int win32_windowsPositonY_initial = 100;
-    const int win32_windowWidth_initial = 500;
-    const int win32_windowHeight_initial = 2*300;
+    int win32_windowPositonX = 100;
+    int win32_windowPositonY = 100;
     int win32_windowWidth = 0;
     int win32_windowHeight = 0;
-    // TODO: Figure out how to control the drawing area of the window...
-    // WS_POPUP is the only way so far to keep it at a controllable area.
-    // (WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX)
-    // WS_POPUP
-    HWND win32_windowHandle = win32_ CreateWindowEx(0, win32_windowClassName, "Window Text", WS_POPUP | WS_OVERLAPPED | WS_THICKFRAME | WS_CAPTION,
-        win32_windowsPositonX_initial, win32_windowsPositonY_initial, win32_windowWidth_initial, win32_windowHeight_initial,
+    int win32_clientWidth = 0;
+    int win32_clientHeight = 0;
+    // The size for the window will be the whole window and not the drawing area, so we will have to adjust it later on and it doesn't matter much here
+    HWND win32_windowHandle = win32_ CreateWindowEx(0, win32_windowClassName, "Window Text", WS_POPUP | WS_OVERLAPPED | WS_THICKFRAME | WS_CAPTION | WS_SYSMENU  | WS_MINIMIZEBOX | WS_MAXIMIZEBOX,
+        win32_windowPositonX, win32_windowPositonY, dontcare_ 10, dontcare_ 10,
         NULL, NULL, hInstance, NULL
     );
+    win32_getWindowSizeAndPosition(win32_windowHandle,&win32_windowWidth,&win32_windowHeight,&win32_windowPositonX,&win32_windowPositonY,true);
+
+    // Before starting with GL stuff, let's figure out the real size of the client area (drawable part of window) and adjust it
+    int win32_desiredClientWidth = 500;
+    int win32_desiredClientHeight = 600;
+    {
+        // Get client size
+        win32_getClientSize(win32_windowHandle, &win32_clientWidth, &win32_clientHeight, true);
+        // Calculate difference between initial size of window and current size of drawable area, that should be the difference to make the window big enough to have our desired drawable area
+        int difference_w = abs(win32_clientWidth - win32_desiredClientWidth);
+        int difference_h = abs(win32_clientHeight - win32_desiredClientHeight);
+        // Set the initially desired position and size now
+        win32_ MoveWindow(win32_windowHandle, win32_windowPositonX, win32_windowPositonY, win32_clientWidth + difference_w, win32_clientHeight + difference_h, 0);
+        // It should have the right size about now
+        win32_getClientSize(win32_windowHandle, &win32_clientWidth, &win32_clientHeight, true);
+        win32_print("Window adjusted\n");
+    }
+    win32_getWindowSizeAndPosition(win32_windowHandle,&win32_windowWidth,&win32_windowHeight,&win32_windowPositonX,&win32_windowPositonY,true);
 
     HDC win32_DeviceContextHandle = win32_ GetDC(win32_windowHandle);
     win32_ ShowWindow(win32_windowHandle, nCmdShow);
-
-    // Before starting with GL stuff, let's figure out the real size of the window (drawable area) and adjust it
-    RECT win32_rect = (RECT) {0};
-    win32_ GetClientRect(win32_windowHandle, &win32_rect);
-    // This just gives us the "drawable" part of the window
-    win32_windowWidth = win32_rect.right - win32_rect.left;
-    win32_windowHeight = win32_rect.bottom - win32_rect.top;
-    // Calculate difference between initial size of window and current size of drawable area, that should be the difference to make the window big enough to have our desired drawable area
-    int difference_w = win32_windowWidth_initial - win32_windowWidth;
-    int difference_h = win32_windowHeight_initial - win32_windowHeight;
-    win32_printf("Difference of w {%d} and {%d}\n", difference_w, difference_h);
-    // Set the initially desired position and size now
-    win32_ MoveWindow(win32_windowHandle, win32_windowsPositonX_initial, win32_windowsPositonY_initial, win32_windowWidth_initial + difference_w, win32_windowHeight_initial + difference_h, 0);
-
-    win32_rect = (RECT) {0};
-    win32_ GetClientRect(win32_windowHandle, &win32_rect);
-    win32_windowWidth = win32_rect.right - win32_rect.left;
-    win32_windowHeight = win32_rect.bottom - win32_rect.top;
-    win32_printf("Double Checking WIDTH: %d, height: %d\n", win32_windowWidth, win32_windowHeight);
-
     opengl_initialize(win32_DeviceContextHandle);
-
+    
     // Some gl code
     const int quads = 1;
     GLuint opengl_texture;
@@ -248,10 +272,10 @@ win32_ int WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, char* win32_cmd
     const int indices[6] = { 0, 1, 2, 0, 2, 3 };
     float vertices [4*(3+4+2)] = {
         // Positionx3, Colorx4 (RGBA), Texturex2 (UV)
-        /*Positions...*/ 0*win32_windowWidth + win32_windowWidth*0.1f, 1*win32_windowHeight - win32_windowHeight*0.1f, 0.0f, /*Colors...*/ 1, 1, 1, 1, /*Textures...*/ 0, 1,
-        /*Positions...*/ 1*win32_windowWidth - win32_windowWidth*0.1f, 1*win32_windowHeight - win32_windowHeight*0.1f, 0.0f, /*Colors...*/ 1, 1, 1, 1, /*Textures...*/ 1, 1,
-        /*Positions...*/ 1*win32_windowWidth - win32_windowWidth*0.1f, 0*win32_windowHeight + win32_windowHeight*0.1f, 0.0f, /*Colors...*/ 1, 1, 1, 1, /*Textures...*/ 1, 0,
-        /*Positions...*/ 0*win32_windowWidth + win32_windowWidth*0.1f, 0*win32_windowHeight + win32_windowHeight*0.1f, 0.0f, /*Colors...*/ 1, 1, 1, 1, /*Textures...*/ 0, 0,
+        /*Positions...*/ 0*win32_clientWidth + win32_clientWidth*0.1f, 1*win32_clientHeight - win32_clientHeight*0.1f, 0.0f, /*Colors...*/ 1, 1, 1, 1, /*Textures...*/ 0, 1,
+        /*Positions...*/ 1*win32_clientWidth - win32_clientWidth*0.1f, 1*win32_clientHeight - win32_clientHeight*0.1f, 0.0f, /*Colors...*/ 1, 1, 1, 1, /*Textures...*/ 1, 1,
+        /*Positions...*/ 1*win32_clientWidth - win32_clientWidth*0.1f, 0*win32_clientHeight + win32_clientHeight*0.1f, 0.0f, /*Colors...*/ 1, 1, 1, 1, /*Textures...*/ 1, 0,
+        /*Positions...*/ 0*win32_clientWidth + win32_clientWidth*0.1f, 0*win32_clientHeight + win32_clientHeight*0.1f, 0.0f, /*Colors...*/ 1, 1, 1, 1, /*Textures...*/ 0, 0,
     };
     {
         glEnable(GL_TEXTURE_2D);
@@ -268,7 +292,7 @@ win32_ int WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, char* win32_cmd
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
         glBindTexture(GL_TEXTURE_2D, 0);
 
-        glViewport(0, 0, win32_windowWidth, win32_windowHeight);
+        glViewport(0, 0, win32_clientWidth, win32_clientHeight);
         glClearColor(1.0f, 0.5f, 0.0f, 0.5f);
 
     }
@@ -303,7 +327,7 @@ win32_ int WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, char* win32_cmd
         // GetMessage blocks until a message is found.
         // Instead, PeekMessage can be used.
         win32_ MSG win32_msg = (MSG) {0};
-        if (win32_ PeekMessage(&win32_msg, NULL, 0, 0, PM_REMOVE)) {
+        while (win32_ PeekMessage(&win32_msg, NULL, 0, 0, PM_REMOVE)) {
             win32_ TranslateMessage(&win32_msg); 
             win32_ DispatchMessage(&win32_msg);
             switch (win32_msg.message) {
@@ -312,12 +336,7 @@ win32_ int WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, char* win32_cmd
                     win32_running = 0;
                 } break;
                 case WM_SIZE: {
-                    RECT win32_rect = (RECT) {0};
-                    // This just gives us the "drawable" part of the window
-                    win32_ GetClientRect(win32_windowHandle, &win32_rect);
-                    win32_windowWidth = win32_rect.right - win32_rect.left;
-                    win32_windowHeight = win32_rect.bottom - win32_rect.top;
-                    win32_printf("WM_SIZE: w: %d, h: %d\n", win32_windowWidth, win32_windowHeight);
+                    
                 } break;
             }
         }
@@ -337,52 +356,18 @@ win32_ int WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, char* win32_cmd
                 win32_counter_lastUpdate = win32_counter.QuadPart;
             }
             // win32_clearConsole();
-            win32_print("__ frame __\n");
+            // win32_print("__ frame __\n");
 
             RECT win32_clientRectangle = (RECT) {0};
-            BOOL win32_result = win32_ GetClientRect(win32_windowHandle, &win32_clientRectangle);
-            if (win32_result) {
-                int win32_clientRectangleWidth = win32_clientRectangle.right;
-                int win32_clientRectangleHeight = win32_clientRectangle.bottom;
-                win32_printf("win32_clientRectangleWidth: %d\n", win32_clientRectangleWidth);
-                win32_printf("win32_clientRectangleHeight: %d\n", win32_clientRectangleHeight);
-                // Current position of image
-                int x0, y0;
-                x0 = vertices[3*9 + 0];
-                y0 = vertices[3*9 + 1];
-                float velocity;
-                static int directionx = 1;
-                static int directiony = 1;
-                velocity = (float)ms_sinceLastUpdate * (1.0f/16.0f);
-                if ((float)x0/(float)win32_clientRectangleWidth > 0.9f) {
-                    directionx = -directionx;
-                }
-                if ((float)x0/(float)win32_clientRectangleWidth < 0.1f) {
-                    directionx = -directionx;
-                }
-                if ((float)y0/(float)win32_clientRectangleHeight > 0.9f) {
-                    directiony = -directiony;
-                }
-                if ((float)y0/(float)win32_clientRectangleHeight < 0.1f) {
-                    directiony = -directiony;
-                }
-
-                // vertices[0*9 + 0] += velocity * directionx;
-                // vertices[0*9 + 1] += velocity * directiony;
-
-                // vertices[1*9 + 0] += velocity * directionx;
-                // vertices[1*9 + 1] += velocity * directiony;
-                
-                // vertices[2*9 + 0] += velocity * directionx;
-                // vertices[2*9 + 1] += velocity * directiony;
-                
-                // vertices[3*9 + 0] += velocity * directionx;
-                // vertices[3*9 + 1] += velocity * directiony;
-            }
+            win32_ GetClientRect(win32_windowHandle, &win32_clientRectangle);
+            int win32_clientRectangleWidth = win32_clientRectangle.right;
+            int win32_clientRectangleHeight = win32_clientRectangle.bottom;
+            // win32_printf("win32_clientRectangleWidth: %d\n", win32_clientRectangleWidth);
+            // win32_printf("win32_clientRectangleHeight: %d\n", win32_clientRectangleHeight);
         }
         // Rendering stuff
         {
-            glViewport(0, 0, win32_windowWidth, win32_windowHeight);
+            glViewport(0, 0, win32_clientWidth, win32_clientHeight);
             glClearColor(1.0f, 0.5f, 0.0f, 0.5f);
             glClear(GL_COLOR_BUFFER_BIT);
             
@@ -425,8 +410,8 @@ win32_ int WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, char* win32_cmd
             // ==> Left = 0, Right = 1, Top = 1 and Bottom = 0
             // Finally inverse the Y coordinate to have something like this:
             // ==> Left = 0, Right = 1, Top = 0 and Bottom = 1
-            GLfloat w = 2.0f/(float)win32_windowWidth;
-            GLfloat h = 2.0f/(float)win32_windowHeight;
+            GLfloat w = 2.0f/(float)win32_clientWidth;
+            GLfloat h = 2.0f/(float)win32_clientHeight;
             GLfloat matrix_projection[] = { ToColumnMajor(
                 w, 0, 0, -1,
                 0, -h, 0, 1,
@@ -445,23 +430,17 @@ win32_ int WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, char* win32_cmd
                 glVertex3f(vertices[(current_vertex*9)+0],vertices[(current_vertex*9)+1],vertices[(current_vertex*9)+2]);
             }
             glColor3f(1,0,0);
-            glVertex3f(0*win32_windowWidth/10.0f,0*win32_windowHeight/10.0f,0);
+            glVertex3f(0*win32_clientWidth/10.0f,0*win32_clientHeight/10.0f,0);
             glColor3f(0,1,0);
-            glVertex3f(2*win32_windowWidth/10.0f,1*win32_windowHeight/10.0f,0);
+            glVertex3f(2*win32_clientWidth/10.0f,1*win32_clientHeight/10.0f,0);
             glColor3f(0,0,1);
-            glVertex3f(1*win32_windowWidth/10.0f,4*win32_windowHeight/10.0f,0);
+            glVertex3f(1*win32_clientWidth/10.0f,4*win32_clientHeight/10.0f,0);
 
-            // glColor3f(0,1,0);
-            // glVertex3f(0,200,0);
-            // glVertex3f(100,200,0);
-            // glVertex3f(50,0,0);
             glEnd();
             glBindTexture(GL_TEXTURE_2D, 0);
 
             win32_ SwapBuffers(win32_DeviceContextHandle);
             // opengl_getErrorsAt("[glerrors] After frame...");
-
-            
         }
         // Times and stuff
         {
@@ -477,9 +456,9 @@ win32_ int WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, char* win32_cmd
             uint64 s_sinceProgramStart = win32_counterDifference_start / win32_frequency_seconds;
             int fps = win32_frequency_seconds / win32_counterDifference_lastFrame;
 
-            win32_printf("ms_sinceLastFrame:   %lu\n", ms_sinceLastFrame);
-            win32_printf("s_sinceProgramStart: %lu\n", s_sinceProgramStart);
-            win32_printf("FPS:                 %d\n", fps);
+            // win32_printf("ms_sinceLastFrame:   %lu\n", ms_sinceLastFrame);
+            // win32_printf("s_sinceProgramStart: %lu\n", s_sinceProgramStart);
+            // win32_printf("FPS:                 %d\n", fps);
 
             win32_counter_lastFrame = win32_counter.QuadPart;
         }
