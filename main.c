@@ -124,35 +124,35 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
     switch (uMsg)
     {
-        case WM_SIZE: {
-            RECT win32_rect;
-            // This just gives us the "drawable" part of the window
-            win32_ GetClientRect(hwnd, &win32_rect);
-            int width = win32_rect.right - win32_rect.left;
-            int height = win32_rect.bottom - win32_rect.top;
-            win32_printf("WIDTH: %d, height: %d\n", width, height);
+        // case WM_SIZE: {
+        //     RECT win32_rect = (RECT) {0};
+        //     // This just gives us the "drawable" part of the window
+        //     win32_ GetClientRect(hwnd, &win32_rect);
+        //     int width = win32_rect.right - win32_rect.left;
+        //     int height = win32_rect.bottom - win32_rect.top;
+        //     win32_printf("WIDTH: %d, height: %d\n", width, height);
             
-            // UINT width = LOWORD(lParam);
-            // UINT height = HIWORD(lParam);
-        } break;
-        case WM_DESTROY: {
-            win32_print("WM_DESTROY\n");
-        } // break;
-        win32_print("and\n");
-        case WM_CLOSE: {
-            win32_print("WM_CLOSE\n");
-            // Basically makes the application post a WM_QUIT message
-            win32_ PostQuitMessage(0);
-        } break;
-        case WM_PAINT: {
-            win32_print("WM_PAINT\n");
-        } break;
+        //     // UINT width = LOWORD(lParam);
+        //     // UINT height = HIWORD(lParam);
+        // } break;
+        // case WM_DESTROY: {
+        //     win32_print("WM_DESTROY\n");
+        // } // break;
+        // win32_print("and\n");
+        // case WM_CLOSE: {
+        //     win32_print("WM_CLOSE\n");
+        //     // Basically makes the application post a WM_QUIT message
+        //     win32_ DestroyWindow(hwnd);
+        //     // win32_ PostQuitMessage(0);
+        // } break;
+        // case WM_PAINT: {
+        //     win32_print("WM_PAINT\n");
+        // } break;
         case WM_SYSKEYDOWN:
         case WM_KEYDOWN: {
             if (wParam == VK_ESCAPE) {
                 // TODO: There is too many points where I want to quite the application... Which one does what?
                 win32_ PostQuitMessage(0);
-                win32_ DestroyWindow(hwnd);
             }
             return 0;
         } break;
@@ -161,30 +161,57 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 }
 
 win32_ int WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, char* win32_cmdLine, int nCmdShow) {
-    win32_ AllocConsole();
-    win32_print("Command line:\n");
-    win32_print(win32_cmdLine);
-    win32_print("\n");
+    // Set up console
+    {
+        win32_ AllocConsole();
+    }
+
     const char win32_windowClassName[]  = "Window Class Text";
-    win32_ WNDCLASSA win32_windowClass = (win32_ WNDCLASSA) {0};
+    WNDCLASSA win32_windowClass = (WNDCLASSA) {0};
     win32_windowClass.lpfnWndProc = WindowProc;
     win32_windowClass.hInstance = hInstance;
     win32_windowClass.lpszClassName = win32_windowClassName;
     win32_ RegisterClass(&win32_windowClass);
 
     // Create the window
-    const int win32_windowWidth = 500;
-    const int win32_windowHeight = 2*300;
+    // This will create a window this size, but the drawable size won't be this
+    const int win32_windowsPositonX_initial = 100;
+    const int win32_windowsPositonY_initial = 100;
+    const int win32_windowWidth_initial = 500;
+    const int win32_windowHeight_initial = 2*300;
+    int win32_windowWidth = 0;
+    int win32_windowHeight = 0;
     // TODO: Figure out how to control the drawing area of the window...
     // WS_POPUP is the only way so far to keep it at a controllable area.
     // (WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX)
     // WS_POPUP
-    win32_ HWND win32_windowHandle = win32_ CreateWindowEx(0, win32_windowClassName, "Window Text", WS_POPUP | WS_OVERLAPPED | WS_THICKFRAME | WS_CAPTION,
-        100, 100, win32_windowWidth, win32_windowHeight,
+    HWND win32_windowHandle = win32_ CreateWindowEx(0, win32_windowClassName, "Window Text", WS_POPUP | WS_OVERLAPPED | WS_THICKFRAME | WS_CAPTION,
+        win32_windowsPositonX_initial, win32_windowsPositonY_initial, win32_windowWidth_initial, win32_windowHeight_initial,
         NULL, NULL, hInstance, NULL
     );
 
-    win32_ HDC win32_DeviceContextHandle = win32_ GetDC(win32_windowHandle);
+    HDC win32_DeviceContextHandle = win32_ GetDC(win32_windowHandle);
+    win32_ ShowWindow(win32_windowHandle, nCmdShow);
+
+    // Before starting with GL stuff, let's figure out the real size of the window (drawable area) and adjust it
+    RECT win32_rect = (RECT) {0};
+    win32_ GetClientRect(win32_windowHandle, &win32_rect);
+    // This just gives us the "drawable" part of the window
+    win32_windowWidth = win32_rect.right - win32_rect.left;
+    win32_windowHeight = win32_rect.bottom - win32_rect.top;
+    // Calculate difference between initial size of window and current size of drawable area, that should be the difference to make the window big enough to have our desired drawable area
+    int difference_w = win32_windowWidth_initial - win32_windowWidth;
+    int difference_h = win32_windowHeight_initial - win32_windowHeight;
+    win32_printf("Difference of w {%d} and {%d}\n", difference_w, difference_h);
+    // Set the initially desired position and size now
+    win32_ MoveWindow(win32_windowHandle, win32_windowsPositonX_initial, win32_windowsPositonY_initial, win32_windowWidth_initial + difference_w, win32_windowHeight_initial + difference_h, 0);
+
+    win32_rect = (RECT) {0};
+    win32_ GetClientRect(win32_windowHandle, &win32_rect);
+    win32_windowWidth = win32_rect.right - win32_rect.left;
+    win32_windowHeight = win32_rect.bottom - win32_rect.top;
+    win32_printf("Double Checking WIDTH: %d, height: %d\n", win32_windowWidth, win32_windowHeight);
+
     opengl_initialize(win32_DeviceContextHandle);
 
     // Some gl code
@@ -245,13 +272,12 @@ win32_ int WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, char* win32_cmd
         glClearColor(1.0f, 0.5f, 0.0f, 0.5f);
 
     }
-    
-    win32_ ShowWindow(win32_windowHandle, nCmdShow);
 
     // win32_ Start timers/counters
     uint64 win32_frequency_seconds;
     uint64 win32_counter_start;
-    uint64 win32_counter_lastFrame, win32_counter_lastUpdate;
+    uint64 win32_counter_lastFrame;
+    uint64 win32_counter_lastUpdate;
     {
         LARGE_INTEGER win32_counter;
         win32_ QueryPerformanceCounter(&win32_counter);
@@ -272,226 +298,190 @@ win32_ int WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, char* win32_cmd
     win32_counter_lastFrame = win32_counter_start;
     win32_counter_lastUpdate = win32_counter_start;
 
-    win32_ MSG win32_msg = (MSG) {0};
-    win32_ BOOL win32_returnValue;
-
-    while((win32_returnValue = win32_ GetMessage(&win32_msg, NULL, 0, 0)) != 0)
-    {
-        if (win32_returnValue == -1)
-        {
-            win32_ LPTSTR win32_errorMessage = NULL;
-            // handle the error and possibly exit
-            win32_ DWORD win32_lastError = win32_ GetLastError();
-            win32_ FormatMessage(
-                FORMAT_MESSAGE_ALLOCATE_BUFFER | 
-                FORMAT_MESSAGE_FROM_SYSTEM |
-                FORMAT_MESSAGE_IGNORE_INSERTS,
-                NULL,
-                win32_lastError,
-                MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-                win32_errorMessage,
-                0, NULL );
-            
-            if (win32_errorMessage) {
-                char buffer[1024];
-                win32_ wsprintf((LPSTR) &buffer,"Error on GetMessage:\n%s", win32_errorMessage);
-                win32_ OutputDebugString((LPCSTR) &buffer);
-                win32_ LocalFree(win32_errorMessage);
-            }
-            else {
-                win32_ OutputDebugString("Error on GetMessage. FormatMessage failed.");
+    int win32_running = 1;
+    while (win32_running) {
+        // GetMessage blocks until a message is found.
+        // Instead, PeekMessage can be used.
+        win32_ MSG win32_msg = (MSG) {0};
+        if (win32_ PeekMessage(&win32_msg, NULL, 0, 0, PM_REMOVE)) {
+            win32_ TranslateMessage(&win32_msg); 
+            win32_ DispatchMessage(&win32_msg);
+            switch (win32_msg.message) {
+                case WM_QUIT: {
+                    win32_print("WM_QUIT\n");
+                    win32_running = 0;
+                } break;
+                case WM_SIZE: {
+                    RECT win32_rect = (RECT) {0};
+                    // This just gives us the "drawable" part of the window
+                    win32_ GetClientRect(win32_windowHandle, &win32_rect);
+                    win32_windowWidth = win32_rect.right - win32_rect.left;
+                    win32_windowHeight = win32_rect.bottom - win32_rect.top;
+                    win32_printf("WM_SIZE: w: %d, h: %d\n", win32_windowWidth, win32_windowHeight);
+                } break;
             }
         }
-        else
+
+        // logic or something
         {
-            TranslateMessage(&win32_msg); 
-            DispatchMessage(&win32_msg);
-
-            // logic or something
+            uint64 ms_sinceLastUpdate = 0;
+            // Get time since last update
             {
-                uint64 ms_sinceLastUpdate = 0;
-                // Get time since last update
-                {
-                    // Internal Counter at this point
-                    LARGE_INTEGER win32_counter;
-                    win32_ QueryPerformanceCounter(&win32_counter);
-                    // Difference since last update to this new update
-                    uint64 win32_counterDifference_lastUpdate = win32_counter.QuadPart - win32_counter_lastUpdate;
-                    // Since we know the frequency we can calculate some times
-                    ms_sinceLastUpdate = 1000 * win32_counterDifference_lastUpdate / win32_frequency_seconds;
-                    win32_counter_lastUpdate = win32_counter.QuadPart;
-                }
-                win32_clearConsole();
-                win32_print("__ frame __\n");
-
-                RECT win32_clientRectangle = (RECT) {0};
-                BOOL win32_result = win32_ GetClientRect(win32_windowHandle, &win32_clientRectangle);
-                if (win32_result) {
-                    int win32_clientRectangleWidth = win32_clientRectangle.right;
-                    int win32_clientRectangleHeight = win32_clientRectangle.bottom;
-                    win32_printf("win32_clientRectangleWidth: %d\n", win32_clientRectangleWidth);
-                    win32_printf("win32_clientRectangleHeight: %d\n", win32_clientRectangleHeight);
-                    // Current position of image
-                    int x0, y0;
-                    x0 = vertices[3*9 + 0];
-                    y0 = vertices[3*9 + 1];
-                    float velocity;
-                    static int directionx = 1;
-                    static int directiony = 1;
-                    velocity = (float)ms_sinceLastUpdate * (1.0f/16.0f);
-                    if ((float)x0/(float)win32_clientRectangleWidth > 0.9f) {
-                        directionx = -directionx;
-                    }
-                    if ((float)x0/(float)win32_clientRectangleWidth < 0.1f) {
-                        directionx = -directionx;
-                    }
-                    if ((float)y0/(float)win32_clientRectangleHeight > 0.9f) {
-                        directiony = -directiony;
-                    }
-                    if ((float)y0/(float)win32_clientRectangleHeight < 0.1f) {
-                        directiony = -directiony;
-                    }
-
-                    x0 += velocity * directionx;
-                    y0 += velocity * directiony;
-
-                    // float new_vertices[] = {
-                    //     // Positionx3, Colorx4 (RGBA), Texturex2 (UV)
-                    //     /*Positions...*/ 0*win32_windowWidth + win32_windowWidth*0.1f, 1*win32_windowHeight - win32_windowHeight*0.1f, 0.0f, /*Colors...*/ 1, 1, 1, 1, /*Textures...*/ 0, 1,
-                    //     /*Positions...*/ 1*win32_windowWidth - win32_windowWidth*0.1f, 1*win32_windowHeight - win32_windowHeight*0.1f, 0.0f, /*Colors...*/ 1, 1, 1, 1, /*Textures...*/ 1, 1,
-                    //     /*Positions...*/ 1*win32_windowWidth - win32_windowWidth*0.1f, 0*win32_windowHeight + win32_windowHeight*0.1f, 0.0f, /*Colors...*/ 1, 1, 1, 1, /*Textures...*/ 1, 0,
-                    //     /*Positions...*/ 0*win32_windowWidth + win32_windowWidth*0.1f, 0*win32_windowHeight + win32_windowHeight*0.1f, 0.0f, /*Colors...*/ 1, 1, 1, 1, /*Textures...*/ 0, 0,
-                    // };
-                    // Velocity of 10 pixels per second
-                    vertices[0*9 + 0] += velocity * directionx;
-                    vertices[0*9 + 1] += velocity * directiony;
-
-                    vertices[1*9 + 0] += velocity * directionx;
-                    vertices[1*9 + 1] += velocity * directiony;
-                    
-                    vertices[2*9 + 0] += velocity * directionx;
-                    vertices[2*9 + 1] += velocity * directiony;
-                    
-                    vertices[3*9 + 0] += velocity * directionx;
-                    vertices[3*9 + 1] += velocity * directiony;
-                    
-                    // vertices[0*9 + 0] += x0;
-                    // vertices[0*9 + 1] += y0;
-
-                    // vertices[1*9 + 0] += x0;
-                    // vertices[1*9 + 1] += y0;
-                    
-                    // vertices[2*9 + 0] += x0;
-                    // vertices[2*9 + 1] += y0;
-                    
-                    // vertices[3*9 + 0] += x0;
-                    // vertices[3*9 + 1] += y0;
-                    // win32_ memcpy((void*)&vertices[0], &new_vertices[0], sizeof(float)*9*4);
-                }
-            }
-            // Rendering stuff
-            {
-                glViewport(0, 0, win32_windowWidth, win32_windowHeight);
-                glClearColor(1.0f, 0.5f, 0.0f, 0.5f);
-                glClear(GL_COLOR_BUFFER_BIT);
-                
-                // AAAAAAAAAAAAHHHHH GL is column major TT
-                // RowMajor:
-                // v0,  v1,  v2,  v3,
-                // v4,  v5,  v6,  v7,
-                // v8,  v9,  v10, v11,
-                // v12, v13, v14, v15
-                // ColumnMajor:
-                // v0,  v4,  v8,  v12,
-                // v1,  v5,  v9,  v13,
-                // v2,  v6,  v10, v14,
-                // v3,  v7,  v11, v15
-                #define ToColumnMajor(v0,v1,v2,v3,v4,v5,v6,v7,v8,v9,v10,v11,v12,v13,v14,v15) v0,v4,v8,v12,v1,v5,v9,v13,v2,v6,v10,v14,v3,v7,v11,v15
-
-                // Invert textures vertically so that I can work with the top left corner as the origin
-                GLfloat matrix_invertVertically[] = { ToColumnMajor(
-                    1, 0, 0, 0,
-                    0,-1, 0, 1,
-                    0, 0, 1, 0,
-                    0, 0, 0, 1
-                )};
-                glMatrixMode(GL_TEXTURE);
-                glLoadIdentity();
-                // glLoadMatrixf(matrix_invertVertically);
-
-                // Nothing to do here
-                glMatrixMode(GL_MODELVIEW);
-                glLoadIdentity();
-
-                // http://www.songho.ca/opengl/gl_projectionmatrix.html
-                // In order to have the origin (0, 0) on the top left corner
-                // and have Right = 1.0f and Bottom = 1.0f :
-                // Taking into account that the default fixed pipeline for OpenGL uses a
-                // projection of type Left = -1, Right = 1, Top = 1 and Bottom = -1
-                // First: Translate every point -1 units on X and Y. That way the projection will change like this:
-                // ==> Left = 0, Right = 2, Top = 2 and Bottom = 0
-                // Next multiply every (X, Y) by 2, that way we achieve something similar to having a projection like this:
-                // ==> Left = 0, Right = 1, Top = 1 and Bottom = 0
-                // Finally inverse the Y coordinate to have something like this:
-                // ==> Left = 0, Right = 1, Top = 0 and Bottom = 1
-                GLfloat w = 2.0f/(float)win32_windowWidth;
-                GLfloat h = 2.0f/(float)win32_windowHeight;
-                GLfloat matrix_projection[] = { ToColumnMajor(
-                    w, 0, 0, -1,
-                    0, -h, 0, 1,
-                    0, 0, 1, 0,
-                    0, 0, 0, 1
-                )};
-                glMatrixMode(GL_PROJECTION);
-                glLoadMatrixf(matrix_projection);
-
-                glBindTexture(GL_TEXTURE_2D, opengl_texture);
-                glBegin(GL_TRIANGLES);
-                glColor3f(1,1,1);
-                for(int index = 0; index < quads*6; index++) {
-                    int current_vertex = indices[index];
-                    glTexCoord2f(vertices[(current_vertex*9)+7],vertices[(current_vertex*9)+8]);
-                    glVertex3f(vertices[(current_vertex*9)+0],vertices[(current_vertex*9)+1],vertices[(current_vertex*9)+2]);
-                }
-                glColor3f(1,0,0);
-                glVertex3f(0*win32_windowWidth/10.0f,0*win32_windowHeight/10.0f,0);
-                glColor3f(0,1,0);
-                glVertex3f(2*win32_windowWidth/10.0f,1*win32_windowHeight/10.0f,0);
-                glColor3f(0,0,1);
-                glVertex3f(1*win32_windowWidth/10.0f,4*win32_windowHeight/10.0f,0);
-
-                // glColor3f(0,1,0);
-                // glVertex3f(0,200,0);
-                // glVertex3f(100,200,0);
-                // glVertex3f(50,0,0);
-                glEnd();
-                glBindTexture(GL_TEXTURE_2D, 0);
-
-                win32_ SwapBuffers(win32_DeviceContextHandle);
-                // opengl_getErrorsAt("[glerrors] After frame...");
-
-                
-            }
-            // Times and stuff
-            {
+                // Internal Counter at this point
                 LARGE_INTEGER win32_counter;
                 win32_ QueryPerformanceCounter(&win32_counter);
-                // Internal Counter at this point
-                // The difference in the counter at the start of the program and right now.
-                uint64 win32_counterDifference_start = win32_counter.QuadPart - win32_counter_start;
-                uint64 win32_counterDifference_lastFrame = win32_counter.QuadPart - win32_counter_lastFrame;
-
+                // Difference since last update to this new update
+                uint64 win32_counterDifference_lastUpdate = win32_counter.QuadPart - win32_counter_lastUpdate;
                 // Since we know the frequency we can calculate some times
-                uint64 ms_sinceLastFrame = 1000 * win32_counterDifference_lastFrame / win32_frequency_seconds;
-                uint64 s_sinceProgramStart = win32_counterDifference_start / win32_frequency_seconds;
-                int fps = win32_frequency_seconds / win32_counterDifference_lastFrame;
-
-                win32_printf("ms_sinceLastFrame:   %lu\n", ms_sinceLastFrame);
-                win32_printf("s_sinceProgramStart: %lu\n", s_sinceProgramStart);
-                win32_printf("FPS:                 %d\n", fps);
-
-                win32_counter_lastFrame = win32_counter.QuadPart;
+                ms_sinceLastUpdate = 1000 * win32_counterDifference_lastUpdate / win32_frequency_seconds;
+                win32_counter_lastUpdate = win32_counter.QuadPart;
             }
+            // win32_clearConsole();
+            win32_print("__ frame __\n");
+
+            RECT win32_clientRectangle = (RECT) {0};
+            BOOL win32_result = win32_ GetClientRect(win32_windowHandle, &win32_clientRectangle);
+            if (win32_result) {
+                int win32_clientRectangleWidth = win32_clientRectangle.right;
+                int win32_clientRectangleHeight = win32_clientRectangle.bottom;
+                win32_printf("win32_clientRectangleWidth: %d\n", win32_clientRectangleWidth);
+                win32_printf("win32_clientRectangleHeight: %d\n", win32_clientRectangleHeight);
+                // Current position of image
+                int x0, y0;
+                x0 = vertices[3*9 + 0];
+                y0 = vertices[3*9 + 1];
+                float velocity;
+                static int directionx = 1;
+                static int directiony = 1;
+                velocity = (float)ms_sinceLastUpdate * (1.0f/16.0f);
+                if ((float)x0/(float)win32_clientRectangleWidth > 0.9f) {
+                    directionx = -directionx;
+                }
+                if ((float)x0/(float)win32_clientRectangleWidth < 0.1f) {
+                    directionx = -directionx;
+                }
+                if ((float)y0/(float)win32_clientRectangleHeight > 0.9f) {
+                    directiony = -directiony;
+                }
+                if ((float)y0/(float)win32_clientRectangleHeight < 0.1f) {
+                    directiony = -directiony;
+                }
+
+                // vertices[0*9 + 0] += velocity * directionx;
+                // vertices[0*9 + 1] += velocity * directiony;
+
+                // vertices[1*9 + 0] += velocity * directionx;
+                // vertices[1*9 + 1] += velocity * directiony;
+                
+                // vertices[2*9 + 0] += velocity * directionx;
+                // vertices[2*9 + 1] += velocity * directiony;
+                
+                // vertices[3*9 + 0] += velocity * directionx;
+                // vertices[3*9 + 1] += velocity * directiony;
+            }
+        }
+        // Rendering stuff
+        {
+            glViewport(0, 0, win32_windowWidth, win32_windowHeight);
+            glClearColor(1.0f, 0.5f, 0.0f, 0.5f);
+            glClear(GL_COLOR_BUFFER_BIT);
+            
+            // AAAAAAAAAAAAHHHHH GL is column major TT
+            // RowMajor:
+            // v0,  v1,  v2,  v3,
+            // v4,  v5,  v6,  v7,
+            // v8,  v9,  v10, v11,
+            // v12, v13, v14, v15
+            // ColumnMajor:
+            // v0,  v4,  v8,  v12,
+            // v1,  v5,  v9,  v13,
+            // v2,  v6,  v10, v14,
+            // v3,  v7,  v11, v15
+            #define ToColumnMajor(v0,v1,v2,v3,v4,v5,v6,v7,v8,v9,v10,v11,v12,v13,v14,v15) v0,v4,v8,v12,v1,v5,v9,v13,v2,v6,v10,v14,v3,v7,v11,v15
+
+            // Invert textures vertically so that I can work with the top left corner as the origin
+            GLfloat matrix_invertVertically[] = { ToColumnMajor(
+                1, 0, 0, 0,
+                0,-1, 0, 1,
+                0, 0, 1, 0,
+                0, 0, 0, 1
+            )};
+            glMatrixMode(GL_TEXTURE);
+            glLoadIdentity();
+            // glLoadMatrixf(matrix_invertVertically);
+
+            // Nothing to do here
+            glMatrixMode(GL_MODELVIEW);
+            glLoadIdentity();
+
+            // http://www.songho.ca/opengl/gl_projectionmatrix.html
+            // In order to have the origin (0, 0) on the top left corner
+            // and have Right = 1.0f and Bottom = 1.0f :
+            // Taking into account that the default fixed pipeline for OpenGL uses a
+            // projection of type Left = -1, Right = 1, Top = 1 and Bottom = -1
+            // First: Translate every point -1 units on X and Y. That way the projection will change like this:
+            // ==> Left = 0, Right = 2, Top = 2 and Bottom = 0
+            // Next multiply every (X, Y) by 2, that way we achieve something similar to having a projection like this:
+            // ==> Left = 0, Right = 1, Top = 1 and Bottom = 0
+            // Finally inverse the Y coordinate to have something like this:
+            // ==> Left = 0, Right = 1, Top = 0 and Bottom = 1
+            GLfloat w = 2.0f/(float)win32_windowWidth;
+            GLfloat h = 2.0f/(float)win32_windowHeight;
+            GLfloat matrix_projection[] = { ToColumnMajor(
+                w, 0, 0, -1,
+                0, -h, 0, 1,
+                0, 0, 1, 0,
+                0, 0, 0, 1
+            )};
+            glMatrixMode(GL_PROJECTION);
+            glLoadMatrixf(matrix_projection);
+
+            glBindTexture(GL_TEXTURE_2D, opengl_texture);
+            glBegin(GL_TRIANGLES);
+            glColor3f(1,1,1);
+            for(int index = 0; index < quads*6; index++) {
+                int current_vertex = indices[index];
+                glTexCoord2f(vertices[(current_vertex*9)+7],vertices[(current_vertex*9)+8]);
+                glVertex3f(vertices[(current_vertex*9)+0],vertices[(current_vertex*9)+1],vertices[(current_vertex*9)+2]);
+            }
+            glColor3f(1,0,0);
+            glVertex3f(0*win32_windowWidth/10.0f,0*win32_windowHeight/10.0f,0);
+            glColor3f(0,1,0);
+            glVertex3f(2*win32_windowWidth/10.0f,1*win32_windowHeight/10.0f,0);
+            glColor3f(0,0,1);
+            glVertex3f(1*win32_windowWidth/10.0f,4*win32_windowHeight/10.0f,0);
+
+            // glColor3f(0,1,0);
+            // glVertex3f(0,200,0);
+            // glVertex3f(100,200,0);
+            // glVertex3f(50,0,0);
+            glEnd();
+            glBindTexture(GL_TEXTURE_2D, 0);
+
+            win32_ SwapBuffers(win32_DeviceContextHandle);
+            // opengl_getErrorsAt("[glerrors] After frame...");
+
+            
+        }
+        // Times and stuff
+        {
+            LARGE_INTEGER win32_counter;
+            win32_ QueryPerformanceCounter(&win32_counter);
+            // Internal Counter at this point
+            // The difference in the counter at the start of the program and right now.
+            uint64 win32_counterDifference_start = win32_counter.QuadPart - win32_counter_start;
+            uint64 win32_counterDifference_lastFrame = win32_counter.QuadPart - win32_counter_lastFrame;
+
+            // Since we know the frequency we can calculate some times
+            uint64 ms_sinceLastFrame = 1000 * win32_counterDifference_lastFrame / win32_frequency_seconds;
+            uint64 s_sinceProgramStart = win32_counterDifference_start / win32_frequency_seconds;
+            int fps = win32_frequency_seconds / win32_counterDifference_lastFrame;
+
+            win32_printf("ms_sinceLastFrame:   %lu\n", ms_sinceLastFrame);
+            win32_printf("s_sinceProgramStart: %lu\n", s_sinceProgramStart);
+            win32_printf("FPS:                 %d\n", fps);
+
+            win32_counter_lastFrame = win32_counter.QuadPart;
         }
     }
 
@@ -501,6 +491,7 @@ win32_ int WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, char* win32_cmd
     }
     // Technically windows will get rid of everything anyway so maybe closing stuff is not really necessary and might just slow down the process of finising our application?
     // https://hero.handmade.network/episode/code/day003/
+    // win32_ Sleep(1500);
     win32_ FreeConsole();
     return 0;
 }
