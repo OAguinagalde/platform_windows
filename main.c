@@ -21,13 +21,13 @@ int abs(int value) {
 }
 
 void win32_clearConsole() {
-    static int initialize = 0;
+    static bool initialized = false;
     static win32_ HANDLE win32_console_stdout = 0;
     // To also clear the scroll back, emit L"\x1b[3J" as well.
     // 2J only clears the visible window and 3J only clears the scroll back.
     static win32_ PCWSTR win32_clearConsoleSequence = L"\x1b[2J";
     static win32_ DWORD win32_originalMode = 0;
-    if (initialize == 0) {
+    if (!initialized) {
         win32_console_stdout = win32_ GetStdHandle(STD_OUTPUT_HANDLE);
         // First we have to activate the virtual terminal processing for this to work
         DWORD mode = 0;
@@ -38,17 +38,17 @@ void win32_clearConsole() {
         // win32_ SetConsoleMode(hStdOut, originalMode);
         mode |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
         win32_ SetConsoleMode(win32_console_stdout, mode);
-        initialize++;
+        initialized = true;
     }
     win32_ WriteConsoleW(win32_console_stdout, win32_clearConsoleSequence, sizeof(win32_clearConsoleSequence)/sizeof((win32_clearConsoleSequence)[0]), NULL, NULL);
 }
 
 void win32_print(const char* string) {
-    static int initialize = 0;
+    static bool initialized = false;
     static win32_ HANDLE win32_console_stdout = 0;
-    if (initialize == 0) {
+    if (!initialized) {
         win32_console_stdout = win32_ GetStdHandle(STD_OUTPUT_HANDLE);
-        initialize++;
+        initialized = true;
     }
     win32_ WriteConsole(win32_console_stdout, (const void*) string, win32_ lstrlen((LPCSTR) string), NULL, NULL);
     // TODO: make win32_ OutputDebugString() output to my STD_OUTPUT_HANDLE
@@ -165,16 +165,18 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
         //     // UINT width = LOWORD(lParam);
         //     // UINT height = HIWORD(lParam);
         // } break;
-        // case WM_DESTROY: {
-        //     win32_print("WM_DESTROY\n");
-        // } // break;
-        // win32_print("and\n");
-        // case WM_CLOSE: {
-        //     win32_print("WM_CLOSE\n");
-        //     // Basically makes the application post a WM_QUIT message
-        //     win32_ DestroyWindow(hwnd);
-        //     // win32_ PostQuitMessage(0);
-        // } break;
+        case WM_DESTROY: {
+            // TODO: turn win32_running to false
+            win32_print("WM_DESTROY\n");
+        } // break;
+        win32_print("and\n");
+        case WM_CLOSE: {
+            // TODO: turn win32_running to false
+            win32_print("WM_CLOSE\n");
+            // Basically makes the application post a WM_QUIT message
+            win32_ DestroyWindow(hwnd);
+            // win32_ PostQuitMessage(0);
+        } break;
         // case WM_PAINT: {
         //     win32_print("WM_PAINT\n");
         // } break;
@@ -322,7 +324,7 @@ win32_ int WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, char* win32_cmd
     win32_counter_lastFrame = win32_counter_start;
     win32_counter_lastUpdate = win32_counter_start;
 
-    int win32_running = 1;
+    bool win32_running = true;
     while (win32_running) {
         // GetMessage blocks until a message is found.
         // Instead, PeekMessage can be used.
@@ -333,7 +335,7 @@ win32_ int WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, char* win32_cmd
             switch (win32_msg.message) {
                 case WM_QUIT: {
                     win32_print("WM_QUIT\n");
-                    win32_running = 0;
+                    win32_running = false;
                 } break;
                 case WM_SIZE: {
                     
