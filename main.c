@@ -1,20 +1,50 @@
 // #include <stdio.h>
 // #include <stdbool.h>
 // #include <assert.h>
-#define WIN32_LEAN_AND_MEAN
+
+// TODO: If I define WIN32_LEAN_AND_MEAN then I lose the contents of mmeapi.h
+// . Which contains WAVEFORMATEX and other things I need for DirectSound.
+// . typedef struct {
+// .     WORD    wFormatTag;        /* format type */
+// .     WORD    nChannels;         /* number of channels (i.e. mono, stereo...) */
+// .     DWORD   nSamplesPerSec;    /* sample rate */
+// .     DWORD   nAvgBytesPerSec;   /* for buffer estimation */
+// .     WORD    nBlockAlign;       /* block size of data */
+// .     WORD    wBitsPerSample;    /* Number of bits per sample of mono data */
+// .     WORD    cbSize;            /* The count in bytes of the size of extra information (after cbSize) */
+// . } WAVEFORMATEX;
+// . #define WAVE_FORMAT_PCM 1
+// . #include <Mmreg.h>
+// #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <gl\GL.h>
+#include <DSound.h>
 
 // Embedded data
 #include "resources.h"
 // A define for me to know what things are win specific and what things are not
 #define win32_ 
 #define dontcare_ 
+
 typedef int bool;
-#define true (1)
-#define false (0)
-typedef long long int64;
-typedef unsigned long long uint64;
+#define true 1
+#define false 0
+
+typedef  signed char        int8;
+typedef  unsigned char      uint8;
+typedef  signed short       int16;
+typedef  unsigned short     uint16;
+typedef  signed long        int32;
+typedef  unsigned long      uint32;
+typedef  signed long long   int64;
+typedef  unsigned long long uint64;
+
+#define debug 1
+#if debug
+    #define assert(expression) { if (!(expression)) {*(int*)0 = 0;} }
+#else
+    #define assert(expression)
+#endif
 
 int abs(int value) {
     return (value < 0) ? -value : value;
@@ -192,6 +222,103 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
     return DefWindowProc(hwnd, uMsg, wParam, lParam);
 }
 
+
+// Direct Sound stuff
+// https://docs.microsoft.com/en-us/previous-versions/windows/desktop/mt708921(v=vs.85)
+typedef HRESULT WINAPI win32_directSound_directSoundCreate_t(LPCGUID pcGuidDevice, LPDIRECTSOUND *ppDS, LPUNKNOWN pUnkOuter);
+// TODO: For now this is global
+static LPDIRECTSOUNDBUFFER win32_directSound_globalSecondaryBuffer;
+
+win32_ void win32_directSound_initialize(HWND win32_windowHandle, int SamplesPerSecond, int BufferSize) {
+    // Load the library dinamically, allowing to deal with the library not existing if that's the case
+    HMODULE win32_directSound_library = win32_ LoadLibraryA("dsound.dll");
+    if(win32_directSound_library) {
+        win32_printf("DirectSound: Library loaded.\n");
+        // To avoid linking a whole library for a single function that I need (DirectSoundCreate). Instead get the address of that function in the library itself.
+        // This also allows to load the sound library dinamically, so that if the library doesn't exist then I can just keep running without using sound.
+        win32_directSound_directSoundCreate_t *DirectSoundCreate = (win32_directSound_directSoundCreate_t *) win32_ GetProcAddress(win32_directSound_library, "DirectSoundCreate");
+
+        // The Direct Sound API seems to be made in an object oriented kind of way. They basically hardcode the vtable that would be automatically created in c++
+        // and in order to use I just have to explicitly invoke the operations of the "object" through the lpVtbl member and pass the address of the object as the
+        // first parameter to every operation. An example is:
+        // win32_directSound_object->lpVtbl->SetCooperativeLevel(&win32_directSound_object, win32_windowHandle, DSSCL_PRIORITY)
+        struct IDirectSound* win32_directSound_object;
+        if(DirectSoundCreate && SUCCEEDED(DirectSoundCreate(0, &win32_directSound_object, 0))) {
+            win32_printf("DirectSound: Interface created.\n");
+            // For some reason the WAVEFORMAT is not defined in DirectSound header... So I just copied instead to my source... Not sure I should be doing this, but
+            // as long as it works......
+            // TODO: What's the math here?
+            WAVEFORMATEX win32_directSound_waveFormat = (WAVEFORMATEX){0};
+            win32_directSound_waveFormat.wFormatTag = WAVE_FORMAT_PCM;
+            // Stereo Sound
+            win32_directSound_waveFormat.nChannels = 2;
+            win32_directSound_waveFormat.nSamplesPerSec = SamplesPerSecond;
+            // 16 bits per sample because... why not?
+            win32_directSound_waveFormat.wBitsPerSample = 16;
+            // nBlockAlign:
+            // . https://docs.microsoft.com/en-us/previous-versions/windows/desktop/bb280529(v=vs.85)
+            // . https://docs.microsoft.com/en-us/windows/win32/api/mmeapi/ns-mmeapi-waveformatex
+            // . "Block alignment, in bytes.
+            // . The value of the BlockAlign property must be equal to the product of Channels and BitsPerSample divided by 8 (bits per byte).
+            // . Software must process a multiple of nBlockAlign bytes of data at a time."
+            win32_directSound_waveFormat.nBlockAlign = (win32_directSound_waveFormat.nChannels*win32_directSound_waveFormat.wBitsPerSample) / 8;
+            // nAvgBytesPerSec:
+            // . "Should be equal to the product of nSamplesPerSec and nBlockAlign"
+            win32_directSound_waveFormat.nAvgBytesPerSec = win32_directSound_waveFormat.nSamplesPerSec*win32_directSound_waveFormat.nBlockAlign;
+            win32_directSound_waveFormat.cbSize = 0;
+
+            // Cooperation level let's windows know how the application sound should interact with the rest of applications. Kind of
+            if(SUCCEEDED(win32_directSound_object->lpVtbl->SetCooperativeLevel(win32_directSound_object, win32_windowHandle, DSSCL_PRIORITY))) {
+                win32_printf("DirectSound: CooperationLevel changed.\n");
+
+                // TODO: Why exactly is it that I need a primary buffer, and then the actual buffer I'll use?
+                // Just to set the format of the "audio devide"?
+                DSBUFFERDESC win32_directSound_bufferDescription = (DSBUFFERDESC){0};
+                win32_directSound_bufferDescription.dwSize = sizeof(win32_directSound_bufferDescription);
+                win32_directSound_bufferDescription.dwFlags = DSBCAPS_PRIMARYBUFFER;
+
+                struct IDirectSoundBuffer* win32_directSound_primaryBuffer;
+                if(SUCCEEDED(win32_directSound_object->lpVtbl->CreateSoundBuffer(win32_directSound_object, &win32_directSound_bufferDescription, &win32_directSound_primaryBuffer, 0))) {
+                    win32_printf("DirectSound: Primary buffer created successfully.\n");
+                    // TODO: This is failing...
+                    HRESULT ret = win32_directSound_primaryBuffer->lpVtbl->SetFormat(win32_directSound_primaryBuffer, (const WAVEFORMATEX*) &win32_directSound_waveFormat);
+                    if(SUCCEEDED(ret)) {
+                        win32_printf("DirectSound: Primary buffer format was set.\n");
+                    }
+                    else {
+                        win32_printf("DirectSound: Primary buffer formatting failed.\n");
+                    }
+                }
+                else {
+                    win32_printf("DirectSound: Primary buffer creation failed.\n");
+                } // create primary sound buffer
+            }
+            else {
+                win32_printf("DirectSound: CooperationLevel change failed.\n");
+            } // coop level
+
+            DSBUFFERDESC win32_directSound_bufferDescription = (DSBUFFERDESC){0};
+            win32_directSound_bufferDescription.dwSize = sizeof(win32_directSound_bufferDescription);
+            win32_directSound_bufferDescription.dwFlags = 0;
+            win32_directSound_bufferDescription.dwBufferBytes = BufferSize;
+            win32_directSound_bufferDescription.lpwfxFormat = &win32_directSound_waveFormat;
+            HRESULT ret = win32_directSound_object->lpVtbl->CreateSoundBuffer(win32_directSound_object, &win32_directSound_bufferDescription, &win32_directSound_globalSecondaryBuffer, 0);
+            if(SUCCEEDED(ret)) {
+                win32_printf("DirectSound: Secondary buffer created successfully.\n");
+            }
+            else {
+                win32_printf("DirectSound: Secondary buffer creation failed.\n");
+            }
+        }
+        else {
+            win32_printf("DirectSound: Interface creation failed.\n");
+        } // DirectSoundCreate
+    }
+    else {
+        win32_printf("DirectSound: Library DSound.dll not found.\n");
+    } // libary dsound.dll exists
+}
+
 win32_ int WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, char* win32_cmdLine, int nCmdShow) {
     // Set up console
     {
@@ -218,6 +345,12 @@ win32_ int WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, char* win32_cmd
         NULL, NULL, hInstance, NULL
     );
     win32_getWindowSizeAndPosition(win32_windowHandle,&win32_windowWidth,&win32_windowHeight,&win32_windowPositonX,&win32_windowPositonY,true);
+
+    // Init DirectSound
+    int win32_directSound_samplesPerSecond = 48000;
+    int win32_directSound_bytesPerSample = sizeof(int16) * 2;
+    int win32_directSound_bufferSize = win32_directSound_bytesPerSample * win32_directSound_samplesPerSecond;
+    win32_directSound_initialize(win32_windowHandle, win32_directSound_samplesPerSecond, win32_directSound_bufferSize);
 
     // Before starting with GL stuff, let's figure out the real size of the client area (drawable part of window) and adjust it
     int win32_desiredClientWidth = 500;
@@ -294,9 +427,8 @@ win32_ int WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, char* win32_cmd
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
         glBindTexture(GL_TEXTURE_2D, 0);
 
-        glViewport(0, 0, win32_clientWidth, win32_clientHeight);
+        // glViewport(0, 0, win32_clientWidth, win32_clientHeight);
         glClearColor(1.0f, 0.5f, 0.0f, 0.5f);
-
     }
 
     // win32_ Start timers/counters
