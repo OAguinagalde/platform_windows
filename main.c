@@ -247,7 +247,6 @@ win32_ void win32_directSound_initialize(HWND win32_windowHandle, int SamplesPer
             win32_printf("DirectSound: Interface created.\n");
             // For some reason the WAVEFORMAT is not defined in DirectSound header... So I just copied instead to my source... Not sure I should be doing this, but
             // as long as it works......
-            // TODO: What's the math here?
             WAVEFORMATEX win32_directSound_waveFormat = (WAVEFORMATEX){0};
             win32_directSound_waveFormat.wFormatTag = WAVE_FORMAT_PCM;
             // Stereo Sound
@@ -280,7 +279,6 @@ win32_ void win32_directSound_initialize(HWND win32_windowHandle, int SamplesPer
                 struct IDirectSoundBuffer* win32_directSound_primaryBuffer;
                 if(SUCCEEDED(win32_directSound_object->lpVtbl->CreateSoundBuffer(win32_directSound_object, &win32_directSound_bufferDescription, &win32_directSound_primaryBuffer, 0))) {
                     win32_printf("DirectSound: Primary buffer created successfully.\n");
-                    // TODO: This is failing...
                     HRESULT ret = win32_directSound_primaryBuffer->lpVtbl->SetFormat(win32_directSound_primaryBuffer, (const WAVEFORMATEX*) &win32_directSound_waveFormat);
                     if(SUCCEEDED(ret)) {
                         win32_printf("DirectSound: Primary buffer format was set.\n");
@@ -321,8 +319,35 @@ win32_ void win32_directSound_initialize(HWND win32_windowHandle, int SamplesPer
 
 win32_ int WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, char* win32_cmdLine, int nCmdShow) {
     // Set up console
+    bool win32_console_attached = false;
+    bool win32_console_allocated = false;
+    HWND win32_console_handle;
     {
-        win32_ AllocConsole();
+        // Attaches to the calling process console, so if called from cmd it starts showing output in there...
+        // although you can still interact normally with that cmd... it's weird.
+        if (win32_ AttachConsole(ATTACH_PARENT_PROCESS)) {
+            // If it worked, then chances are that the console is being shared between the whatever process had it open and this application,
+            // which can be weird. If calling process is something like cmd or powershell, then print a new line character to have a "clean start"
+            win32_print("\n");
+            win32_console_attached = true;
+        }
+        else {
+            // if AttachConsole fails means that there is no parent process console open, so just allocate a new one
+            if (win32_ AllocConsole()) {
+                win32_console_attached = true;
+                win32_console_allocated = true;
+            }
+            else {
+                assert(false && "Not really Unreachable... But like what the heck? alloc console failed?");
+            }
+        }
+        if (win32_console_attached) {
+            win32_console_handle = win32_ GetConsoleWindow();
+            if (win32_console_handle == NULL) {
+                assert(false && "Unreachable! GetConsoleWindow should never fail if there is a console attached");
+            }
+        }
+        win32_print("Console set.\n");
     }
 
     const char win32_windowClassName[]  = "Window Class Text";
@@ -373,6 +398,26 @@ win32_ int WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, char* win32_cmd
     win32_ ShowWindow(win32_windowHandle, nCmdShow);
     opengl_initialize(win32_DeviceContextHandle);
     
+    // If console is allocated (is not a parent console like powershell) then position it next to the main window side by side.
+    if (win32_console_allocated){
+        // Just always put the console right of main window
+        int width, height, x, y;
+        win32_getWindowSizeAndPosition(win32_console_handle, &width, &height, &x, &y, true);
+        // Moving the console doesn't redraw it, so parts of the window that were originally hidden won't be rendered.
+        win32_ MoveWindow(win32_console_handle, win32_windowPositonX+win32_windowWidth, win32_windowPositonY, width, height, 0);
+        // So after moving the window, redraw it.
+        // https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-redrawwindow
+        // "If both the hrgnUpdate and lprcUpdate parameters are NULL, the entire client area is added to the update region."
+        win32_ RedrawWindow(win32_console_handle, NULL, NULL, RDW_INVALIDATE);
+        
+        win32_printf("Console final size and position\n");
+        win32_getWindowSizeAndPosition(win32_console_handle, &width, &height, &x, &y, true);
+        win32_getClientSize(win32_console_handle, &width, &height, true);
+        win32_printf("Window final size and position\n");
+        win32_getWindowSizeAndPosition(win32_windowHandle,&win32_windowWidth,&win32_windowHeight,&win32_windowPositonX,&win32_windowPositonY,true);
+        win32_getClientSize(win32_windowHandle, &width, &height, true);
+    }
+
     // Some gl code
     const int quads = 1;
     GLuint opengl_texture;
@@ -605,6 +650,10 @@ win32_ int WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, char* win32_cmd
     // Technically windows will get rid of everything anyway so maybe closing stuff is not really necessary and might just slow down the process of finising our application?
     // https://hero.handmade.network/episode/code/day003/
     // win32_ Sleep(1500);
-    win32_ FreeConsole();
+    if (win32_console_attached) {
+        win32_ FreeConsole();
+        win32_console_allocated = false;
+        win32_console_attached = false;
+    }
     return 0;
 }
