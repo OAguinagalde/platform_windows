@@ -50,6 +50,8 @@ int abs(int value) {
     return (value < 0) ? -value : value;
 }
 
+// TODO: if parent process is in use for attached console (powershell or cmd) I'm not sure if changing the ConsoleMode might
+// break something
 void win32_clearConsole() {
     static bool initialized = false;
     static win32_ HANDLE win32_console_stdout = 0;
@@ -73,6 +75,7 @@ void win32_clearConsole() {
     win32_ WriteConsoleW(win32_console_stdout, win32_clearConsoleSequence, sizeof(win32_clearConsoleSequence)/sizeof((win32_clearConsoleSequence)[0]), NULL, NULL);
 }
 
+// WARNING: Not ideal but right now the first call to win32_print will set the stdout.
 void win32_print(const char* string) {
     static bool initialized = false;
     static win32_ HANDLE win32_console_stdout = 0;
@@ -88,6 +91,7 @@ void win32_printf(const char* format, ...) {
     static char buffer[1024];
     va_list args;
     va_start(args, format);
+    // WARNING. There is a bunch of restrictions with wvsprintf.
     win32_ wvsprintf((LPSTR) &buffer, format, args);
     va_end(args);
     win32_print(&buffer[0]);
@@ -171,12 +175,8 @@ void opengl_initialize(HDC win32_DeviceContextHandle) {
     win32_ SetPixelFormat(win32_DeviceContextHandle, win32_suggestedPixelFormatIndex, &win32_chosenPixelFormat);
 
     HGLRC win32_GLRenderingContextHandle = wglCreateContext(win32_DeviceContextHandle);
-    if (win32_ wglMakeCurrent(win32_DeviceContextHandle, win32_GLRenderingContextHandle)) {
-        // Good
-    } else {
-        win32_ HANDLE win32_console_stdout = win32_ GetStdHandle(STD_OUTPUT_HANDLE);
+    if (! win32_ wglMakeCurrent(win32_DeviceContextHandle, win32_GLRenderingContextHandle)) {
         win32_print("Error on wglMakeCurrent");
-        win32_ OutputDebugString("Error on wglMakeCurrent");
     }
 }
 
@@ -270,8 +270,10 @@ win32_ void win32_directSound_initialize(HWND win32_windowHandle, int SamplesPer
             if(SUCCEEDED(win32_directSound_object->lpVtbl->SetCooperativeLevel(win32_directSound_object, win32_windowHandle, DSSCL_PRIORITY))) {
                 win32_printf("DirectSound: CooperationLevel changed.\n");
 
-                // TODO: Why exactly is it that I need a primary buffer, and then the actual buffer I'll use?
-                // Just to set the format of the "audio devide"?
+                // As far as I know, the reason we have to create a main buffer (which we won't use) and then later on a "secondary buffer"
+                // which we will actually work with is because nowadays windows (?) doesn't allow to write to the sound hardware directly (the main buffer)
+                // and instead every application uses a secondary buffer, and later on windows mix every secondary buffer and does the necessary work with
+                // that main buffer. Something like that...
                 DSBUFFERDESC win32_directSound_bufferDescription = (DSBUFFERDESC){0};
                 win32_directSound_bufferDescription.dwSize = sizeof(win32_directSound_bufferDescription);
                 win32_directSound_bufferDescription.dwFlags = DSBCAPS_PRIMARYBUFFER;
@@ -543,6 +545,10 @@ win32_ int WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, char* win32_cmd
             int win32_clientRectangleHeight = win32_clientRectangle.bottom;
             // win32_printf("win32_clientRectangleWidth: %d\n", win32_clientRectangleWidth);
             // win32_printf("win32_clientRectangleHeight: %d\n", win32_clientRectangleHeight);
+        }
+        // Test sound here
+        {
+
         }
         // Rendering stuff
         {
