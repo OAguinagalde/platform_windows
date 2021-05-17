@@ -204,8 +204,9 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
             // TODO: turn win32_running to false
             win32_print("WM_CLOSE\n");
             // Basically makes the application post a WM_QUIT message
-            win32_ DestroyWindow(hwnd);
-            // win32_ PostQuitMessage(0);
+            // win32_ DestroyWindow(hwnd); // This only closes the main window
+            win32_ PostQuitMessage(0); // This sends the quit message which the main loop will read and end the loop
+            return 0;
         } break;
         // case WM_PAINT: {
         //     win32_print("WM_PAINT\n");
@@ -546,9 +547,207 @@ win32_ int WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, char* win32_cmd
             // win32_printf("win32_clientRectangleWidth: %d\n", win32_clientRectangleWidth);
             // win32_printf("win32_clientRectangleHeight: %d\n", win32_clientRectangleHeight);
         }
+        
+        // TODO: Play sounds!
+        // . https://hero.handmade.network/episode/code/day008/
+        // . * A square wave oscillates between "full-positive" to "full-negative" every half period
+        // . * A Stereo (2-channel) 16-bit PCM audio buffer is arranged as an array of signed int16 values in (left channel value, right channel value) pairs
+        // . * A "sample" sometimes refers to the values for all channels in a sampling period, and sometimes a value for a single channel. Be careful.
+        // . The procedure for writing sound data into a buffer is as follows:
+        // . 1. Figure out where in the buffer you want to start writing, and how much data you want to write
+        // .     Its useful to look at the play cursor - IDirectSoundBuffer8::GetCurrentPosition()
+        // . 2. Acquire a lock on the buffer - IDirectSoundBuffer8::Lock()
+        // .     Because we are working with a circular buffer, this call will return 1 or 2 writable regions
+        // . 3. Write the samples to the buffer
+        // . 4. Unlock the regions - IDirectSoundBuffer8::Unlock()
         // Test sound here
         {
+            // Get DSound buffer cursors
+            DWORD playCursor, writeCursor;
+            {
+                // We have the position of the play cursor and the write cursor.
+                // https://docs.microsoft.com/en-us/previous-versions/windows/desktop/ee418062(v=vs.85)
+                // "The write cursor is the point in the buffer ahead of which it is safe to write data to the buffer.
+                // . Data should not be written to the part of the buffer after the play cursor and before the write cursor."
+                HRESULT result = win32_directSound_globalSecondaryBuffer->lpVtbl->GetCurrentPosition(win32_directSound_globalSecondaryBuffer, &playCursor, &writeCursor);
+                if (result != DS_OK) {
+                    switch (result) {
+                        case DSERR_INVALIDPARAM: {
+                            assert(false && "DirectSound Buffer GetCurrentPosition DSERR_INVALIDPARAM");
+                        } break;
+                        case DSERR_PRIOLEVELNEEDED: {
+                            assert(false && "DirectSound Buffer GetCurrentPosition DSERR_PRIOLEVELNEEDED");
+                        } break;
+                        default: {
+                            assert(false && "Unreachable error code (DSOUND Buffer GetCurrentPosition)");
+                        } break;
+                    }
+                }
+            }
+            
 
+            // Figure out how many bytes to write in the buffer
+            int bytesToWrite;
+            // {
+                // FIXME: Just for now
+                int framesPerSecond = 60;
+                int samplesPerSecond = win32_directSound_samplesPerSecond;
+                int bytesPerSample = win32_directSound_bytesPerSample;
+
+                int samplesPerFrame = (int)((float)samplesPerSecond/(float)framesPerSecond);
+                int bytesPerFrame = samplesPerFrame * bytesPerSample;
+
+                bytesToWrite = bytesPerFrame;
+            // }
+
+            // Lock the audio buffer
+            // We will receive up to 2 "buffers" to write, since it's a circular buffer, so we will have to check wether we got 1 or 2
+            void* bufferPointer1 = NULL;
+            int bufferSize1 = 0;
+            void* bufferPointer2 = NULL;
+            int bufferSize2 = 0;
+            DWORD lockFlags = 0;
+            // Possible flags:
+            // . DSBLOCK_FROMWRITECURSOR Start the lock at the write cursor. The dwOffset parameter is ignored.
+            // . DSBLOCK_ENTIREBUFFER Lock the entire buffer. The dwBytes parameter is ignored.
+            bool usingTwoBuffers = false;
+            {
+                HRESULT result = win32_directSound_globalSecondaryBuffer->lpVtbl->Lock(
+                    win32_directSound_globalSecondaryBuffer, writeCursor, bytesToWrite, &bufferPointer1, &bufferSize1, &bufferPointer2, &bufferSize2, lockFlags
+                );
+                if (result != DS_OK) {
+                    switch (result) {
+                        case DSERR_BUFFERLOST: {
+                            assert(false && "DirectSound Buffer Lock DSERR_BUFFERLOST");
+                        } break;
+                        case DSERR_INVALIDCALL: {
+                            assert(false && "DirectSound Buffer Lock DSERR_INVALIDCALL");
+                        } break;
+                        case DSERR_INVALIDPARAM: {
+                            assert(false && "DirectSound Buffer Lock DSERR_INVALIDPARAM");
+                        } break;
+                        case DSERR_PRIOLEVELNEEDED: {
+                            assert(false && "DirectSound Buffer Lock DSERR_PRIOLEVELNEEDED");
+                        } break;
+                        default: {
+                            assert(false && "Unreachable error code (DSOUND Buffer Lock)");
+                        } break;
+                    }
+                }
+            }
+            if (bufferSize1 < bytesToWrite) {
+                usingTwoBuffers = true;
+            }
+            else {
+                assert(bufferSize1 == bytesToWrite);
+            }
+
+            // TODO: Write the data to the buffer(s) and keep track of how much data was written in each buffer
+            // The buffers are arrays of signed int16
+            int16* buffer1 = (int16*) bufferPointer1;
+            int16* buffer2 = (int16*) bufferPointer2;
+            int actualAmmountOfDataWrittenToBuffer1 = 0;
+            int actualAmmountOfDataWrittenToBuffer2 = 0;
+
+            // WARNING: I legit have no clue what I'm doing!!
+            // I'm trying to make a square sound wave of 60 hz
+                int hz = 60; // "oscillations"(no idea how to call this, gotta study sound basics lol) per second
+                int oscillationsPerFrame = (int)((float)hz / (float)framesPerSecond);
+                int volume = 16000;
+                int maxVol = volume;
+                int minVol = -volume;
+                
+                int ammountOfSamplesPerOscillation = (int)((float)samplesPerFrame / (float)oscillationsPerFrame);
+                int ammountOfSamplesPerHalfOscillation = ammountOfSamplesPerOscillation / 2;
+
+            int sampleCounter = 0;
+            if (usingTwoBuffers) {
+                for(int i = 0; i < bufferSize1/sizeof(int16); i++) {
+                    if (sampleCounter%ammountOfSamplesPerOscillation < ammountOfSamplesPerHalfOscillation) {
+                        buffer1[i] = (int16)maxVol;
+                    }
+                    else {
+                        buffer1[i] = (int16)minVol;
+                    }
+                    sampleCounter++;
+                }
+                for(int i = 0; i < bufferSize2/sizeof(int16); i++) {
+                    if (sampleCounter%ammountOfSamplesPerOscillation < ammountOfSamplesPerHalfOscillation) {
+                        buffer2[i] = (int16)maxVol;
+                    }
+                    else {
+                        buffer2[i] = (int16)minVol;
+                    }
+                    sampleCounter++;
+                }
+                actualAmmountOfDataWrittenToBuffer1 = bufferSize1/sizeof(int16) * sizeof(int16);
+                actualAmmountOfDataWrittenToBuffer2 = bufferSize2/sizeof(int16) * sizeof(int16);
+            }
+            else {
+                for(int i = 0; i < bufferSize1/sizeof(int16); i++) {
+                    if (sampleCounter%ammountOfSamplesPerOscillation < ammountOfSamplesPerHalfOscillation) {
+                        buffer1[i] = (int16)maxVol;
+                    }
+                    else {
+                        buffer1[i] = (int16)minVol;
+                    }
+                    sampleCounter++;
+                }
+                actualAmmountOfDataWrittenToBuffer1 = bufferSize1/sizeof(int16) * sizeof(int16);
+            }
+            assert(actualAmmountOfDataWrittenToBuffer1 + actualAmmountOfDataWrittenToBuffer2 == bytesToWrite);
+
+            // Unlock the buffers
+            {
+                HRESULT result = win32_directSound_globalSecondaryBuffer->lpVtbl->Unlock(
+                    win32_directSound_globalSecondaryBuffer, bufferPointer1, actualAmmountOfDataWrittenToBuffer1, bufferPointer2, actualAmmountOfDataWrittenToBuffer2
+                );
+                if (result != DS_OK) {
+                    switch (result) {
+                        case DSERR_INVALIDCALL: {
+                            assert(false && "DirectSound Buffer Unlock DSERR_INVALIDCALL");
+                        } break;
+                        case DSERR_INVALIDPARAM: {
+                            assert(false && "DirectSound Buffer Unlock DSERR_INVALIDPARAM");
+                        } break;
+                        case DSERR_PRIOLEVELNEEDED: {
+                            assert(false && "DirectSound Buffer Unlock DSERR_PRIOLEVELNEEDED");
+                        } break;
+                        default: {
+                            assert(false && "Unreachable error code (DSOUND Buffer Unlock)");
+                        } break;
+                    }
+                }
+            }
+
+            // Finally, play the buffer!
+            {
+                // https://docs.microsoft.com/en-us/previous-versions/windows/desktop/mt708933(v=vs.85)
+                // First 2 parameters are reserved and should always be 0
+                // Only flag available is DSBPLAY_LOOPING
+                HRESULT result = win32_directSound_globalSecondaryBuffer->lpVtbl->Play(
+                    win32_directSound_globalSecondaryBuffer, 0, 0, DSBPLAY_LOOPING
+                );
+                if (result != DS_OK) {
+                    switch (result) {
+                        case DSERR_BUFFERLOST: {
+                            assert(false && "DirectSound Buffer Play DSERR_BUFFERLOST");
+                        } break;
+                        case DSERR_INVALIDCALL: {
+                            assert(false && "DirectSound Buffer Play DSERR_INVALIDCALL");
+                        } break;
+                        case DSERR_INVALIDPARAM: {
+                            assert(false && "DirectSound Buffer Play DSERR_INVALIDPARAM");
+                        } break;
+                        case DSERR_PRIOLEVELNEEDED: {
+                            assert(false && "DirectSound Buffer Play DSERR_PRIOLEVELNEEDED");
+                        } break;
+                        default: {
+                            assert(false && "Unreachable error code (DSOUND Buffer Play)");
+                        } break;
+                    }
+                }
+            }
         }
         // Rendering stuff
         {
