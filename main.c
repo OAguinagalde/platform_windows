@@ -18,6 +18,8 @@
 // #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <gl\GL.h>
+// https://www.khronos.org/registry/OpenGL/api/GL/wglext.h
+#include "wglext.h"
 #include <DSound.h>
 
 // Embedded data
@@ -97,6 +99,14 @@ void win32_printf(const char* format, ...) {
     win32_print(&buffer[0]);
 }
 
+void formattedString(char* buffer, const char* format, ...) {
+    va_list args;
+    va_start(args, format);
+    // WARNING. There is a bunch of restrictions with wvsprintf.
+    win32_ wvsprintf((LPSTR) buffer, format, args);
+    va_end(args);
+}
+
 void opengl_getErrors(void) {
     GLenum opengl_error = 0;
     while ((opengl_error = glGetError()) != GL_NO_ERROR) {
@@ -148,6 +158,7 @@ void* opengl_getFunctionAddress(const char* functionName) {
         HMODULE module = win32_ LoadLibraryA("opengl32.dll");
         function = (void*) win32_ GetProcAddress(module, functionName);
     }
+    // both GetProcAddress and wglGetProcAddress return NULL on failure, so just check for return value to see if function was found
     return function;
 }
 
@@ -460,7 +471,20 @@ win32_ int WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, char* win32_cmd
         /*Positions...*/ 1*win32_clientWidth - win32_clientWidth*0.1f, 0*win32_clientHeight + win32_clientHeight*0.1f, 0.0f, /*Colors...*/ 1, 1, 1, 1, /*Textures...*/ 1, 0,
         /*Positions...*/ 0*win32_clientWidth + win32_clientWidth*0.1f, 0*win32_clientHeight + win32_clientHeight*0.1f, 0.0f, /*Colors...*/ 1, 1, 1, 1, /*Textures...*/ 0, 0,
     };
+    // GL extensions I need as declared on "wglext.h"
+    // wglSwapIntervalEXT for locking to locking to VSYNC
     {
+        // Activate VSYNC using an extension
+        PFNWGLSWAPINTERVALEXTPROC wglSwapIntervalEXT = NULL;
+        wglSwapIntervalEXT = (PFNWGLSWAPINTERVALEXTPROC) opengl_getFunctionAddress("wglSwapIntervalEXT");
+        if (wglSwapIntervalEXT) {
+            wglSwapIntervalEXT(1);
+            win32_printf("VSync Activated.\n");
+        }
+        else {
+            win32_printf("VSync Failed. Extension wglSwapIntervalEXT not present.\n");
+        }
+
         glEnable(GL_TEXTURE_2D);
         glGenTextures(1, &opengl_texture);
         glBindTexture(GL_TEXTURE_2D, opengl_texture);
@@ -523,6 +547,7 @@ win32_ int WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, char* win32_cmd
             }
         }
 
+        static int fps = 0;
         // logic or something
         {
             uint64 ms_sinceLastUpdate = 0;
@@ -544,11 +569,17 @@ win32_ int WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, char* win32_cmd
             win32_ GetClientRect(win32_windowHandle, &win32_clientRectangle);
             int win32_clientRectangleWidth = win32_clientRectangle.right;
             int win32_clientRectangleHeight = win32_clientRectangle.bottom;
+            // Change title to show fps
+            {
+                static char win32_window_text[1024];
+                formattedString(&win32_window_text[0], "%d", fps);
+                SetWindowText(win32_windowHandle, win32_window_text);
+            }
             // win32_printf("win32_clientRectangleWidth: %d\n", win32_clientRectangleWidth);
             // win32_printf("win32_clientRectangleHeight: %d\n", win32_clientRectangleHeight);
         }
         
-        // TODO: Play sounds!
+        // Play sounds!
         // . https://hero.handmade.network/episode/code/day008/
         // . * A square wave oscillates between "full-positive" to "full-negative" every half period
         // . * A Stereo (2-channel) 16-bit PCM audio buffer is arranged as an array of signed int16 values in (left channel value, right channel value) pairs
@@ -560,7 +591,6 @@ win32_ int WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, char* win32_cmd
         // .     Because we are working with a circular buffer, this call will return 1 or 2 writable regions
         // . 3. Write the samples to the buffer
         // . 4. Unlock the regions - IDirectSoundBuffer8::Unlock()
-        // Test sound here
         {
             // Get DSound buffer cursors
             DWORD playCursor, writeCursor;
@@ -749,6 +779,7 @@ win32_ int WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, char* win32_cmd
                 }
             }
         }
+
         // Rendering stuff
         {
             glViewport(0, 0, win32_clientWidth, win32_clientHeight);
@@ -838,7 +869,7 @@ win32_ int WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, char* win32_cmd
             // Since we know the frequency we can calculate some times
             uint64 ms_sinceLastFrame = 1000 * win32_counterDifference_lastFrame / win32_frequency_seconds;
             uint64 s_sinceProgramStart = win32_counterDifference_start / win32_frequency_seconds;
-            int fps = win32_frequency_seconds / win32_counterDifference_lastFrame;
+            fps = win32_frequency_seconds / win32_counterDifference_lastFrame;
 
             // win32_printf("ms_sinceLastFrame:   %lu\n", ms_sinceLastFrame);
             // win32_printf("s_sinceProgramStart: %lu\n", s_sinceProgramStart);
