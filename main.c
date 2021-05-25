@@ -231,6 +231,8 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
             return 0;
         } break;
     }
+    // Events that I'm consciously not capturing:
+    // . WM_SETCURSOR Sent to a window if the mouse causes the cursor to move within a window and mouse input is not captured
     return DefWindowProc(hwnd, uMsg, wParam, lParam);
 }
 
@@ -369,6 +371,7 @@ win32_ int WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, char* win32_cmd
     win32_windowClass.lpfnWndProc = WindowProc;
     win32_windowClass.hInstance = hInstance;
     win32_windowClass.lpszClassName = win32_windowClassName;
+    win32_windowClass.hCursor = LoadCursor(NULL, IDC_ARROW);
     win32_ RegisterClass(&win32_windowClass);
 
     // Create the window
@@ -528,6 +531,7 @@ win32_ int WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, char* win32_cmd
     win32_counter_lastFrame = win32_counter_start;
     win32_counter_lastUpdate = win32_counter_start;
 
+    // Main Loop
     bool win32_running = true;
     while (win32_running) {
         // GetMessage blocks until a message is found.
