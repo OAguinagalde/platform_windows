@@ -20,6 +20,10 @@
 #include <gl\GL.h>
 // https://www.khronos.org/registry/OpenGL/api/GL/wglext.h
 #include "wglext.h"
+// https://www.khronos.org/registry/OpenGL/api/GL/glext.h
+// . depends on KHR/khrplatform.h
+// . https://www.khronos.org/registry/EGL/api/KHR/khrplatform.h
+#include "glext.h"
 #include <DSound.h>
 
 // Embedded data
@@ -43,7 +47,8 @@ typedef  unsigned long long uint64;
 
 #define debug 1
 #if debug
-    #define assert(expression) { if (!(expression)) {*(int*)0 = 0;} }
+    #define assert_printf_function win32_printf
+    #define assert(expression) { if (!(expression)) {assert_printf_function("Assertion failed!\n"); assert_printf_function("\t%s\n", #expression); *(int*)0 = 0;} }
 #else
     #define assert(expression)
 #endif
@@ -438,8 +443,11 @@ win32_ int WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, char* win32_cmd
     // Some gl code
     const int quads = 1;
     GLuint opengl_texture;
+    // TODO: Clean this stuff
     GLuint opengl_vertexBuffer;
     GLuint opengl_indexBuffer;
+    GLuint renderer_shaderProgramObject;
+    GLuint renderer_vertexArrayObject;
     // What OpenGL works with...
     // * Screen:
     //     (-1,1)_________(1,1)
@@ -474,22 +482,57 @@ win32_ int WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, char* win32_cmd
         /*Positions...*/ 1*win32_clientWidth - win32_clientWidth*0.1f, 0*win32_clientHeight + win32_clientHeight*0.1f, 0.0f, /*Colors...*/ 1, 1, 1, 1, /*Textures...*/ 1, 0,
         /*Positions...*/ 0*win32_clientWidth + win32_clientWidth*0.1f, 0*win32_clientHeight + win32_clientHeight*0.1f, 0.0f, /*Colors...*/ 1, 1, 1, 1, /*Textures...*/ 0, 0,
     };
-    // GL extensions I need as declared on "wglext.h"
-    // wglSwapIntervalEXT for locking to locking to VSYNC
+    // TODO: This is just for testing, eventually get rid of this and use the already made vertex buffer for the renderer
+    float vertices_testrenderer [4*(2+2+4)] = {
+        // x, y, u, v, r, g, b, a
+        // 0.5f,  0.5f, 1.0f, 1.0f,  1.0f, 0.0f, 0.0f, 1.0f,      // top right
+        // 0.5f, -0.5f, 1.0f, 0.0f,  0.0f, 1.0f, 0.0f, 1.0f,      // bottom right
+        // -0.5f, -0.5f, 0.0f, 0.0f,  0.0f, 0.0f, 1.0f, 1.0f,      // bottom left
+        // -0.5f,  0.5f, 0.0f, 1.0f,  1.0f, 1.0f, 0.0f, 1.0f,      // top left 
+        // /*Positions...*/ 0*win32_clientWidth + win32_clientWidth*0.1f, 1*win32_clientHeight - win32_clientHeight*0.1f, /*Textures...*/ 0, 1, /*Colors...*/ 1, 1, 1, 1,
+        // /*Positions...*/ 1*win32_clientWidth - win32_clientWidth*0.1f, 1*win32_clientHeight - win32_clientHeight*0.1f, /*Textures...*/ 1, 1, /*Colors...*/ 1, 1, 1, 1,
+        // /*Positions...*/ 1*win32_clientWidth - win32_clientWidth*0.1f, 0*win32_clientHeight + win32_clientHeight*0.1f, /*Textures...*/ 1, 0, /*Colors...*/ 1, 1, 1, 1,
+        // /*Positions...*/ 0*win32_clientWidth + win32_clientWidth*0.1f, 0*win32_clientHeight + win32_clientHeight*0.1f, /*Textures...*/ 0, 0, /*Colors...*/ 1, 1, 1, 1,
+        /*Positions...*/ 0*win32_clientWidth + win32_clientWidth*0.1f, 1*win32_clientHeight - win32_clientHeight*0.1f, /*Textures...*/ 0, constexpr_texture_height, /*Colors...*/ 1, 1, 1, 1,
+        /*Positions...*/ 1*win32_clientWidth - win32_clientWidth*0.1f, 1*win32_clientHeight - win32_clientHeight*0.1f, /*Textures...*/ constexpr_texture_width, constexpr_texture_height, /*Colors...*/ 1, 1, 1, 1,
+        /*Positions...*/ 1*win32_clientWidth - win32_clientWidth*0.1f, 0*win32_clientHeight + win32_clientHeight*0.1f, /*Textures...*/ constexpr_texture_width, 0, /*Colors...*/ 1, 1, 1, 1,
+        /*Positions...*/ 0*win32_clientWidth + win32_clientWidth*0.1f, 0*win32_clientHeight + win32_clientHeight*0.1f, /*Textures...*/ 0, 0, /*Colors...*/ 1, 1, 1, 1,
+        
+    };
+    #define opengl_loadExtension(type, name) type name = NULL; name = opengl_getFunctionAddress(#name); assert(name && #name);
+    opengl_loadExtension(PFNWGLSWAPINTERVALEXTPROC, wglSwapIntervalEXT);
+    opengl_loadExtension(PFNGLGENBUFFERSPROC, glGenBuffers);
+    opengl_loadExtension(PFNGLBINDBUFFERPROC, glBindBuffer);
+    opengl_loadExtension(PFNGLBUFFERDATAPROC, glBufferData);
+    opengl_loadExtension(PFNGLCREATESHADERPROC, glCreateShader);
+    opengl_loadExtension(PFNGLSHADERSOURCEPROC, glShaderSource);
+    opengl_loadExtension(PFNGLCOMPILESHADERPROC, glCompileShader);
+    opengl_loadExtension(PFNGLGETSHADERIVPROC, glGetShaderiv);
+    opengl_loadExtension(PFNGLGETSHADERINFOLOGPROC, glGetShaderInfoLog);
+    opengl_loadExtension(PFNGLBLENDFUNCSEPARATEPROC, glBlendFuncSeparate);
+    opengl_loadExtension(PFNGLCREATEPROGRAMPROC, glCreateProgram);
+    opengl_loadExtension(PFNGLATTACHSHADERPROC, glAttachShader);
+    opengl_loadExtension(PFNGLLINKPROGRAMPROC, glLinkProgram);
+    opengl_loadExtension(PFNGLGETPROGRAMIVPROC, glGetProgramiv);
+    opengl_loadExtension(PFNGLGETPROGRAMINFOLOGPROC, glGetProgramInfoLog);
+    opengl_loadExtension(PFNGLDELETESHADERPROC, glDeleteShader);
+    opengl_loadExtension(PFNGLUSEPROGRAMPROC, glUseProgram);
+    opengl_loadExtension(PFNGLGENVERTEXARRAYSPROC, glGenVertexArrays);
+    opengl_loadExtension(PFNGLBINDVERTEXARRAYPROC, glBindVertexArray);
+    opengl_loadExtension(PFNGLVERTEXATTRIBPOINTERPROC, glVertexAttribPointer);
+    opengl_loadExtension(PFNGLENABLEVERTEXATTRIBARRAYPROC, glEnableVertexAttribArray);
+    opengl_loadExtension(PFNGLACTIVETEXTUREPROC, glActiveTexture);
+    opengl_loadExtension(PFNGLUNIFORMMATRIX4FVPROC, glUniformMatrix4fv);
+    opengl_loadExtension(PFNGLUNIFORM2FVPROC, glUniform2fv);
+    opengl_loadExtension(PFNGLGETUNIFORMLOCATIONPROC, glGetUniformLocation);
     {
-        // Activate VSYNC using an extension
-        PFNWGLSWAPINTERVALEXTPROC wglSwapIntervalEXT = NULL;
-        wglSwapIntervalEXT = (PFNWGLSWAPINTERVALEXTPROC) opengl_getFunctionAddress("wglSwapIntervalEXT");
-        if (wglSwapIntervalEXT) {
-            wglSwapIntervalEXT(1);
-            win32_printf("VSync Activated.\n");
-        }
-        else {
-            win32_printf("VSync Failed. Extension wglSwapIntervalEXT not present.\n");
-        }
-
+        wglSwapIntervalEXT(1);
+        
         glEnable(GL_TEXTURE_2D);
         glGenTextures(1, &opengl_texture);
+        // This is not really necessary because TEXTURE0 is always activated by default.
+        // But I would require to do this with the other texture units
+        // glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, opengl_texture);
         // Heap allocation and free on win32...
         // unsigned char* data = NULL;
@@ -502,8 +545,138 @@ win32_ int WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, char* win32_cmd
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
         glBindTexture(GL_TEXTURE_2D, 0);
 
-        // glViewport(0, 0, win32_clientWidth, win32_clientHeight);
-        glClearColor(1.0f, 0.5f, 0.0f, 0.5f);
+        // Sprite Batching Renderer
+        typedef struct {
+            union {
+                union {
+                    // 2 for position
+                    float x;
+                    float y;
+                    // 2 for texture uv
+                    float u;
+                    float v;
+                    // 4 for rgba
+                    float r;
+                    float g;
+                    float b;
+                    float a;
+                };
+                float data[2+2+4];
+            };
+        } renderer_vertex;
+        const int renderer_sizeOfVertex = sizeof(renderer_vertex);
+        #define constexpr_renderer_maxQuads 1000
+        #define constexpr_renderer_maxVertices (constexpr_renderer_maxQuads * 4)
+        #define constexpr_renderer_maxIndices (constexpr_renderer_maxQuads * 6)
+        const int renderer_maxQuads = constexpr_renderer_maxQuads;
+        const int renderer_maxVertices = constexpr_renderer_maxVertices;
+        const int renderer_maxIndices = constexpr_renderer_maxIndices;
+        renderer_vertex renderer_vertices[constexpr_renderer_maxVertices];
+        for (int i = 0; i < constexpr_renderer_maxVertices; i++) {
+            renderer_vertices[i].data[0] = 0;
+            renderer_vertices[i].data[1] = 0;
+            renderer_vertices[i].data[2] = 0;
+            renderer_vertices[i].data[3] = 0;
+            renderer_vertices[i].data[4] = 0;
+            renderer_vertices[i].data[5] = 0;
+            renderer_vertices[i].data[6] = 0;
+            renderer_vertices[i].data[7] = 0;
+        }
+        unsigned long renderer_indices[constexpr_renderer_maxIndices];
+        // Initialize index buffer since it will be const
+        for (int i = 0; i < renderer_maxQuads; i++) {
+            int vertex = i * 4; // 4 vertices per quad
+            int index = i * 6; // 6 indices per quad
+            renderer_indices[index + 0] = vertex + 0;
+            renderer_indices[index + 1] = vertex + 1;
+            renderer_indices[index + 2] = vertex + 2;
+            renderer_indices[index + 3] = vertex + 0;
+            renderer_indices[index + 4] = vertex + 2;
+            renderer_indices[index + 5] = vertex + 3;
+        }
+        // Shaders (taken from the embedded resources)
+        const char* renderer_vertexShader = &vshader[0];
+        const int renderer_vertexShaderSize = vshader_size;
+        const char* renderer_fragmentShader = &fshader[0];
+        const int renderer_fragmentShaderSize = fshader_size;
+
+        glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ZERO);
+
+        // VAO
+        // GLuint renderer_vertexArrayObject;
+        glGenVertexArrays(1, &renderer_vertexArrayObject);
+        glBindVertexArray(renderer_vertexArrayObject);
+
+        // Index Buffer
+        GLuint renderer_elementBufferObject;
+        glGenBuffers(1, &renderer_elementBufferObject);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, renderer_elementBufferObject);
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(renderer_indices), renderer_indices, GL_STATIC_DRAW);
+        
+        // VBO
+        GLuint renderer_vertexBufferObject;
+        glGenBuffers(1, &renderer_vertexBufferObject);
+        glBindBuffer(GL_ARRAY_BUFFER, renderer_vertexBufferObject);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(vertices_testrenderer), vertices_testrenderer, GL_STATIC_DRAW);
+        // TODO: setup the renderer to work with a dynamically vertex buffer
+        // glBufferData(GL_ARRAY_BUFFER, sizeof(renderer_vertices), renderer_vertices, GL_DYNAMIC_DRAW);
+
+        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(0));
+        glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(2 * sizeof(float)));
+        glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(4 * sizeof(float)));
+        glEnableVertexAttribArray(0);
+        glEnableVertexAttribArray(1);
+        glEnableVertexAttribArray(2);
+
+        glBindVertexArray(0);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+        glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+        // Shader stuff
+        GLuint renderer_vertexShaderObject;
+        GLuint renderer_fragmentShaderObject;
+        renderer_vertexShaderObject = glCreateShader(GL_VERTEX_SHADER);
+        renderer_fragmentShaderObject = glCreateShader(GL_FRAGMENT_SHADER);
+        glShaderSource(renderer_vertexShaderObject, 1, (const GLchar *const *) &renderer_vertexShader, NULL);
+        glShaderSource(renderer_fragmentShaderObject, 1, (const GLchar *const *) &renderer_fragmentShader, NULL);
+        glCompileShader(renderer_vertexShaderObject);
+        {
+            int success;
+            char info[512];
+            glGetShaderiv(renderer_vertexShaderObject, GL_COMPILE_STATUS, &success);
+            if(!success) {
+                glGetShaderInfoLog(renderer_vertexShaderObject, 512, NULL, info);
+                win32_printf("Error compiling vertex shader:\n\t%s", &info[0]);
+            }
+        }
+        glCompileShader(renderer_fragmentShaderObject);
+        {
+            int success;
+            char info[512];
+            glGetShaderiv(renderer_fragmentShaderObject, GL_COMPILE_STATUS, &success);
+            if(!success) {
+                glGetShaderInfoLog(renderer_fragmentShaderObject, 512, NULL, info);
+                win32_printf("Error compiling fragment shader:\n\t%s", &info[0]);
+            }
+        }
+        // GLuint renderer_shaderProgramObject;
+        renderer_shaderProgramObject = glCreateProgram();
+
+        glAttachShader(renderer_shaderProgramObject, renderer_vertexShaderObject);
+        glAttachShader(renderer_shaderProgramObject, renderer_fragmentShaderObject);
+        glLinkProgram(renderer_shaderProgramObject);
+        {
+            int success;
+            char info[512];
+            glGetProgramiv(renderer_shaderProgramObject, GL_LINK_STATUS, &success);
+            if(!success) {
+                glGetProgramInfoLog(renderer_shaderProgramObject, 512, NULL, info);
+                win32_printf("Error linking shader program:\n\t%s", &info[0]);
+            }
+        }
+        glDeleteShader(renderer_vertexShaderObject);
+        glDeleteShader(renderer_fragmentShaderObject);
+        opengl_getErrorsAt("[glerrors] After shader program creation...");
     }
 
     // win32_ Start timers/counters
@@ -783,52 +956,14 @@ win32_ int WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, char* win32_cmd
                 }
             }
         }
-
         // Rendering stuff
         {
             glViewport(0, 0, win32_clientWidth, win32_clientHeight);
             glClearColor(1.0f, 0.5f, 0.0f, 0.5f);
             glClear(GL_COLOR_BUFFER_BIT);
             
-            // AAAAAAAAAAAAHHHHH GL is column major TT
-            // RowMajor:
-            // v0,  v1,  v2,  v3,
-            // v4,  v5,  v6,  v7,
-            // v8,  v9,  v10, v11,
-            // v12, v13, v14, v15
-            // ColumnMajor:
-            // v0,  v4,  v8,  v12,
-            // v1,  v5,  v9,  v13,
-            // v2,  v6,  v10, v14,
-            // v3,  v7,  v11, v15
             #define ToColumnMajor(v0,v1,v2,v3,v4,v5,v6,v7,v8,v9,v10,v11,v12,v13,v14,v15) v0,v4,v8,v12,v1,v5,v9,v13,v2,v6,v10,v14,v3,v7,v11,v15
 
-            // Invert textures vertically so that I can work with the top left corner as the origin
-            GLfloat matrix_invertVertically[] = { ToColumnMajor(
-                1, 0, 0, 0,
-                0,-1, 0, 1,
-                0, 0, 1, 0,
-                0, 0, 0, 1
-            )};
-            glMatrixMode(GL_TEXTURE);
-            glLoadIdentity();
-            // glLoadMatrixf(matrix_invertVertically);
-
-            // Nothing to do here
-            glMatrixMode(GL_MODELVIEW);
-            glLoadIdentity();
-
-            // http://www.songho.ca/opengl/gl_projectionmatrix.html
-            // In order to have the origin (0, 0) on the top left corner
-            // and have Right = 1.0f and Bottom = 1.0f :
-            // Taking into account that the default fixed pipeline for OpenGL uses a
-            // projection of type Left = -1, Right = 1, Top = 1 and Bottom = -1
-            // First: Translate every point -1 units on X and Y. That way the projection will change like this:
-            // ==> Left = 0, Right = 2, Top = 2 and Bottom = 0
-            // Next multiply every (X, Y) by 2, that way we achieve something similar to having a projection like this:
-            // ==> Left = 0, Right = 1, Top = 1 and Bottom = 0
-            // Finally inverse the Y coordinate to have something like this:
-            // ==> Left = 0, Right = 1, Top = 0 and Bottom = 1
             GLfloat w = 2.0f/(float)win32_clientWidth;
             GLfloat h = 2.0f/(float)win32_clientHeight;
             GLfloat matrix_projection[] = { ToColumnMajor(
@@ -837,25 +972,24 @@ win32_ int WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, char* win32_cmd
                 0, 0, 1, 0,
                 0, 0, 0, 1
             )};
-            glMatrixMode(GL_PROJECTION);
-            glLoadMatrixf(matrix_projection);
 
             glBindTexture(GL_TEXTURE_2D, opengl_texture);
-            glBegin(GL_TRIANGLES);
-            glColor3f(1,1,1);
-            for(int index = 0; index < quads*6; index++) {
-                int current_vertex = indices[index];
-                glTexCoord2f(vertices[(current_vertex*9)+7],vertices[(current_vertex*9)+8]);
-                glVertex3f(vertices[(current_vertex*9)+0],vertices[(current_vertex*9)+1],vertices[(current_vertex*9)+2]);
-            }
-            glColor3f(1,0,0);
-            glVertex3f(0*win32_clientWidth/10.0f,0*win32_clientHeight/10.0f,0);
-            glColor3f(0,1,0);
-            glVertex3f(2*win32_clientWidth/10.0f,1*win32_clientHeight/10.0f,0);
-            glColor3f(0,0,1);
-            glVertex3f(1*win32_clientWidth/10.0f,4*win32_clientHeight/10.0f,0);
+            
+            // TODO: Each frame update the vertex buffer data
+            
+            GLfloat texture_dimensions[2];
+            texture_dimensions[0] = texture_width;
+            texture_dimensions[1] = texture_height;
 
-            glEnd();
+            glUseProgram(renderer_shaderProgramObject);
+            GLint shader_uniformPosition_mvp = glGetUniformLocation(renderer_shaderProgramObject, "mvp");
+            GLint shader_uniformPosition_texture_dimensions = glGetUniformLocation(renderer_shaderProgramObject, "texture_dimensions");
+            glUniformMatrix4fv(shader_uniformPosition_mvp, 1, GL_FALSE, matrix_projection);
+            glUniform2fv(shader_uniformPosition_texture_dimensions, 1, &texture_dimensions[0]);
+            glBindVertexArray(renderer_vertexArrayObject);
+            static int quads_ready_to_render = 1;
+            glDrawElements(GL_TRIANGLES, quads_ready_to_render * 6, GL_UNSIGNED_INT, 0);
+            glBindVertexArray(0);
             glBindTexture(GL_TEXTURE_2D, 0);
 
             win32_ SwapBuffers(win32_DeviceContextHandle);
