@@ -9,6 +9,7 @@
 #include <windows.h>
 #pragma comment(lib, "User32")
 #include <cassert>
+#include <cstdlib>
 namespace Win32 {
     // Clears the console associated with the stdout
     void ClearConsole() {
@@ -211,6 +212,23 @@ namespace Win32 {
         return windowHandle;
     }
 
+    void MoveAWindow(HWND windowHandle, int x, int y, int w, int h) {
+        // Moving the console doesn't redraw it, so parts of the window that were originally hidden won't be rendered.
+        MoveWindow(windowHandle, x, y, w, h, 0);
+        // So after moving the window, redraw it.
+        // https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-redrawwindow
+        // "If both the hrgnUpdate and lprcUpdate parameters are NULL, the entire client area is added to the update region."
+        RedrawWindow(windowHandle, NULL, NULL, RDW_INVALIDATE);
+    }
+
+    void AllocateOnWindowsStuff() {
+        // Heap allocation and free on win32...
+        // unsigned char* data = NULL;
+        // data = win32_ HeapAlloc(win32_ GetProcessHeap(), 0, sizeof(unsigned char)*texture_data_size);
+        // win32_ memcpy(data, &texture_data[0], sizeof(unsigned char)*texture_data_size);
+        // win32_ HeapFree(win32_ GetProcessHeap(), 0, (LPVOID) data);
+    }
+
     void Test1() {
         GetConsole();
         // ClearConsole();
@@ -243,6 +261,35 @@ void main(int argc, char** argv) {
 #pragma comment(lib, "Opengl32")
 namespace Win32 {
     namespace GL {
+
+        #define DeclareExtension(type, name) type name = NULL;
+        DeclareExtension(PFNWGLSWAPINTERVALEXTPROC, wglSwapIntervalEXT);
+        DeclareExtension(PFNGLGENBUFFERSPROC, glGenBuffers);
+        DeclareExtension(PFNGLBINDBUFFERPROC, glBindBuffer);
+        DeclareExtension(PFNGLBUFFERDATAPROC, glBufferData);
+        DeclareExtension(PFNGLCREATESHADERPROC, glCreateShader);
+        DeclareExtension(PFNGLSHADERSOURCEPROC, glShaderSource);
+        DeclareExtension(PFNGLCOMPILESHADERPROC, glCompileShader);
+        DeclareExtension(PFNGLGETSHADERIVPROC, glGetShaderiv);
+        DeclareExtension(PFNGLGETSHADERINFOLOGPROC, glGetShaderInfoLog);
+        DeclareExtension(PFNGLBLENDFUNCSEPARATEPROC, glBlendFuncSeparate);
+        DeclareExtension(PFNGLCREATEPROGRAMPROC, glCreateProgram);
+        DeclareExtension(PFNGLATTACHSHADERPROC, glAttachShader);
+        DeclareExtension(PFNGLLINKPROGRAMPROC, glLinkProgram);
+        DeclareExtension(PFNGLGETPROGRAMIVPROC, glGetProgramiv);
+        DeclareExtension(PFNGLGETPROGRAMINFOLOGPROC, glGetProgramInfoLog);
+        DeclareExtension(PFNGLDELETESHADERPROC, glDeleteShader);
+        DeclareExtension(PFNGLUSEPROGRAMPROC, glUseProgram);
+        DeclareExtension(PFNGLGENVERTEXARRAYSPROC, glGenVertexArrays);
+        DeclareExtension(PFNGLBINDVERTEXARRAYPROC, glBindVertexArray);
+        DeclareExtension(PFNGLVERTEXATTRIBPOINTERPROC, glVertexAttribPointer);
+        DeclareExtension(PFNGLENABLEVERTEXATTRIBARRAYPROC, glEnableVertexAttribArray);
+        DeclareExtension(PFNGLACTIVETEXTUREPROC, glActiveTexture);
+        DeclareExtension(PFNGLUNIFORMMATRIX4FVPROC, glUniformMatrix4fv);
+        DeclareExtension(PFNGLUNIFORM2FVPROC, glUniform2fv);
+        DeclareExtension(PFNGLGETUNIFORMLOCATIONPROC, glGetUniformLocation);
+        #undef DeclareExtension
+
         // Loops through and print all the errors related to OpenGL
         void GetErrors() {
             GLenum opengl_error = 0;
@@ -283,7 +330,7 @@ namespace Win32 {
         }
 
         // Given a devide context handle, initializes a ready to use OpenGl context with a (hopefully) RGBA32 pixel format
-        void InitializeGlContext(HDC DeviceContextHandle) {    
+        void InitializeWGlContext(HDC DeviceContextHandle) {    
             // First we need to get a pixel format that we want OpenGL to use
             // But we don't know what we can use, so we first describe our ideal pixel format
             PIXELFORMATDESCRIPTOR desiredPixelFormat = {};
@@ -315,6 +362,75 @@ namespace Win32 {
                 Print("Pixel Format selected and wglContext created\n");
             }
         }
+
+        void GetGLExtensions() {
+            #define InitializeExtension(type, name) name = (type) GetFunctionAddress(#name); assert(name && #name);
+            InitializeExtension(PFNWGLSWAPINTERVALEXTPROC, wglSwapIntervalEXT);
+            InitializeExtension(PFNGLGENBUFFERSPROC, glGenBuffers);
+            InitializeExtension(PFNGLBINDBUFFERPROC, glBindBuffer);
+            InitializeExtension(PFNGLBUFFERDATAPROC, glBufferData);
+            InitializeExtension(PFNGLCREATESHADERPROC, glCreateShader);
+            InitializeExtension(PFNGLSHADERSOURCEPROC, glShaderSource);
+            InitializeExtension(PFNGLCOMPILESHADERPROC, glCompileShader);
+            InitializeExtension(PFNGLGETSHADERIVPROC, glGetShaderiv);
+            InitializeExtension(PFNGLGETSHADERINFOLOGPROC, glGetShaderInfoLog);
+            InitializeExtension(PFNGLBLENDFUNCSEPARATEPROC, glBlendFuncSeparate);
+            InitializeExtension(PFNGLCREATEPROGRAMPROC, glCreateProgram);
+            InitializeExtension(PFNGLATTACHSHADERPROC, glAttachShader);
+            InitializeExtension(PFNGLLINKPROGRAMPROC, glLinkProgram);
+            InitializeExtension(PFNGLGETPROGRAMIVPROC, glGetProgramiv);
+            InitializeExtension(PFNGLGETPROGRAMINFOLOGPROC, glGetProgramInfoLog);
+            InitializeExtension(PFNGLDELETESHADERPROC, glDeleteShader);
+            InitializeExtension(PFNGLUSEPROGRAMPROC, glUseProgram);
+            InitializeExtension(PFNGLGENVERTEXARRAYSPROC, glGenVertexArrays);
+            InitializeExtension(PFNGLBINDVERTEXARRAYPROC, glBindVertexArray);
+            InitializeExtension(PFNGLVERTEXATTRIBPOINTERPROC, glVertexAttribPointer);
+            InitializeExtension(PFNGLENABLEVERTEXATTRIBARRAYPROC, glEnableVertexAttribArray);
+            InitializeExtension(PFNGLACTIVETEXTUREPROC, glActiveTexture);
+            InitializeExtension(PFNGLUNIFORMMATRIX4FVPROC, glUniformMatrix4fv);
+            InitializeExtension(PFNGLUNIFORM2FVPROC, glUniform2fv);
+            InitializeExtension(PFNGLGETUNIFORMLOCATIONPROC, glGetUniformLocation);
+            #undef InitializeExtension
+        }
+
+        struct Renderer {
+            // What OpenGL works with...
+            // Screen                 Textures
+            // (-1, 1)_____( 1, 1)    ( 0, 1)_____( 1, 1)
+            // |                 |    |                 |
+            // |                 |    |                 |
+            // (-1,-1)_____( 1,-1)    ( 0, 0)_____( 1, 0)
+            
+            // What I want to work with...
+            // Screen                 Textures               Indexes
+            // ( 0, 0)_____( 1, 0)    ( 0, 0)_____( 1, 0)    3---2
+            // |                 |    |                 |    | / |
+            // |                 |    |                 |    0___1
+            // ( 0, 1)_____( 1, 1)    ( 0, 1)_____( 1, 1)
+
+            // A single texture unit for now
+            GLuint textureHandle;
+
+            void LoadTexture(GLvoid* data, GLsizei w, GLsizei h) {
+                glBindTexture(GL_TEXTURE_2D, textureHandle);
+                glTexImage2D(GL_TEXTURE_2D, 0, 4, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
+                glBindTexture(GL_TEXTURE_2D, 0);
+                GetErrors(__FUNCTION__);
+            }
+
+            void Initialize() {
+                // Something about windows and framerates, dont remember, probably vertical sync
+                wglSwapIntervalEXT(1);
+                
+                // Enable textures
+                // Load them later with LoadTexture
+                glEnable(GL_TEXTURE_2D);
+                glActiveTexture(GL_TEXTURE0);
+                glGenTextures(1, &textureHandle);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+            }
+        };
     }
 }
 
@@ -445,8 +561,6 @@ namespace Win32 {
         }
     }
 }
-
-
 
 namespace Buffers {
     struct BufferHeader {
