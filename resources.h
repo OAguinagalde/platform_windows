@@ -35,7 +35,8 @@ const char fshader[] =
 "\n"
 "void main()\n"
 "{\n"
-"    FragColor = texture(texture_sampler, texture_uv) * color;\n"
+// "    FragColor = texture(texture_sampler, texture_uv) * color;\n"
+"    FragColor = color;\n"
 "}";
 const int fshader_size = sizeof(fshader);
 

@@ -54,20 +54,20 @@ namespace Win32 {
 
     // Given a windowHandle, queries the width, height and position (x, y) of the window
     void GetWindowSizeAndPosition(HWND windowHandle, int* width, int* height, int* x, int* y, bool printDebug) {
-        RECT rect = {};
+        RECT rect;
         GetWindowRect(windowHandle, &rect);
-        if (x) *x = rect.left;
-        if (y) *y = rect.top;
-        if (width) *width = rect.right - rect.left;
-        if (height) *height = rect.bottom - rect.top;
+        *x = rect.left;
+        *y = rect.top;
+        *width = rect.right - rect.left;
+        *height = rect.bottom - rect.top;
         if (printDebug) {
-            FormattedPrint("Windows at %d,%d with size %dx%d\n", *x, *y, *width, *height);
+            FormattedPrint("Window at %d,%d with size %dx%d\n", *x, *y, *width, *height);
         }
     }
 
     // Given a windowHandle, queries the width and height of the client size (The drawable area)
     void GetClientSize(HWND windowHandle, int* width, int* height, bool printDebug) {
-        RECT rect = {};
+        RECT rect;
         // This just gives us the "drawable" part of the window
         GetClientRect(windowHandle, &rect);
         *width = rect.right - rect.left;
@@ -78,9 +78,10 @@ namespace Win32 {
     }
 
     // Try to get a console, for situations where there might not be one
-    // Return true on success or false if it wasn't possible to get a console
+    // Return true when an external consolle (new window) has been allocated
     bool GetConsole() {
         bool consoleFound = false;
+        bool consoleIsExternal = false;
         if (AttachConsole(ATTACH_PARENT_PROCESS)) {
             // Situation example:
             // Opening a Windows Subsystem process from a cmd.exe process. It the process will attach to cmd.exe's console
@@ -112,6 +113,7 @@ namespace Win32 {
             if (AllocConsole()) {
                 // Creates a new console
                 consoleFound = true;
+                consoleIsExternal = true;
             }
             else {
                 // AllocConsole function fails if the calling process already has a console
@@ -119,7 +121,7 @@ namespace Win32 {
             }
         }
         
-        return consoleFound;
+        return consoleIsExternal;
     }
 
     // A very basic, default, WindowProc.
@@ -179,35 +181,34 @@ namespace Win32 {
     }
 
     HWND MakeWindow(const char* windowClassName, const char* title, HINSTANCE hInstance, int nCmdShow) {
-        int windowPositonX = 100;
-        int windowPositonY = 100;
+        int windowPositionX = 100;
+        int windowPositionY = 100;
         int windowWidth = 0;
         int windowHeight = 0;
         int clientWidth = 0;
         int clientHeight = 0;
         // The size for the window will be the whole window and not the drawing area, so we will have to adjust it later on and it doesn't matter much here
         HWND windowHandle = CreateWindowEx(0, windowClassName, title, WS_POPUP | WS_OVERLAPPED | WS_THICKFRAME | WS_CAPTION | WS_SYSMENU  | WS_MINIMIZEBOX | WS_MAXIMIZEBOX,
-            windowPositonX, windowPositonY, 10, 10,
+            windowPositionX, windowPositionY, 10, 10,
             NULL, NULL, hInstance, NULL
         );
         Print("Window created\n");
-        GetWindowSizeAndPosition(windowHandle,&windowWidth,&windowHeight,&windowPositonX,&windowPositonY,true);
+        GetWindowSizeAndPosition(windowHandle,&windowWidth,&windowHeight,&windowPositionX,&windowPositionY,false);
         
         // let's figure out the real size of the client area (drawable part of window) and adjust it
         int desiredClientWidth = 500;
         int desiredClientHeight = 600;
         // Get client size
-        GetClientSize(windowHandle, &clientWidth, &clientHeight, true);
+        GetClientSize(windowHandle, &clientWidth, &clientHeight, false);
         // Calculate difference between initial size of window and current size of drawable area, that should be the difference to make the window big enough to have our desired drawable area
         int difference_w = abs(clientWidth - desiredClientWidth);
         int difference_h = abs(clientHeight - desiredClientHeight);
         // Set the initially desired position and size now
-        MoveWindow(windowHandle, windowPositonX, windowPositonY, clientWidth + difference_w, clientHeight + difference_h, 0);
+        MoveWindow(windowHandle, windowPositionX, windowPositionY, windowWidth + difference_w, windowHeight + difference_h, 0);
         // It should have the right size about now
-        GetClientSize(windowHandle, &clientWidth, &clientHeight, true);
         Print("Window adjusted\n");
-        GetWindowSizeAndPosition(windowHandle, &windowWidth, &windowHeight, &windowPositonX, &windowPositonY, true);
-
+        GetWindowSizeAndPosition(windowHandle, &windowWidth, &windowHeight, &windowPositionX, &windowPositionY, true);
+        GetClientSize(windowHandle, &clientWidth, &clientHeight, true);
         ShowWindow(windowHandle, nCmdShow);
         return windowHandle;
     }
@@ -264,6 +265,7 @@ namespace Win32 {
         return cpuCounter.QuadPart;
     }
 
+    // This is not a function, it's just a reference for me for when I want to do a message loop and I dont remember...
     void LoopWindowsMessages() {
         // GetMessage blocks until a message is found.
         // Instead, PeekMessage can be used.
@@ -282,6 +284,17 @@ namespace Win32 {
         }
     }
 
+    HDC GetDeviceContextHandle(HWND windowHandle) {
+        HDC hdc = GetDC(windowHandle);
+        return hdc;
+    }
+
+    void SwapPixelBuffers(HDC deviceContextHandle) {
+        // The SwapBuffers function exchanges the front and back buffers if the
+        // current pixel format for the window referenced by the specified device context includes a back buffer.
+        SwapBuffers(deviceContextHandle);
+    }
+
     void Test1() {
         GetConsole();
         // ClearConsole();
@@ -295,12 +308,6 @@ namespace Win32 {
     }
 }
 
-// int WinMain(HINSTANCE hInst, HINSTANCE hInstPrev, PSTR cmdline, int cmdshow) {
-void main(int argc, char** argv) {
-    Win32::Test1();
-    Sleep(1000);
-}
-
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <gl\GL.h>
@@ -310,6 +317,7 @@ void main(int argc, char** argv) {
 // . depends on KHR/khrplatform.h
 // . https://www.khronos.org/registry/EGL/api/KHR/khrplatform.h
 #include "glext.h"
+#pragma comment(lib, "gdi32")
 #pragma comment(lib, "Opengl32")
 namespace Win32 {
     namespace GL {
@@ -344,8 +352,10 @@ namespace Win32 {
 
         // Loops through and print all the errors related to OpenGL
         void GetErrors() {
+            bool noErrors = true;
             GLenum opengl_error = 0;
             while ((opengl_error = glGetError()) != GL_NO_ERROR) {
+                noErrors = false;
                 Print("Error gl: ");
                 switch (opengl_error) {
                     case GL_NO_ERROR:          { Print("GL_NO_ERROR\n"); } break;
@@ -358,11 +368,14 @@ namespace Win32 {
                     default:                   { Print("Unknown Error\n"); } break;
                 }
             }
+            if (noErrors) {
+                Print("No errors\n");
+            }
         }
 
         // Loops through and print (Labeled) all the errors related to OpenGL
         void GetErrors(const char* label) {
-            Print(label);
+            FormattedPrint("%s: ", label);
             GetErrors();
         }
 
@@ -445,6 +458,84 @@ namespace Win32 {
             #undef InitializeExtension
         }
 
+        struct Color {
+            float r, g, b, a;
+            void Red() {
+                r = 1; g = 0; b = 0; a = 1;
+            }
+            void Green() {
+                r = 0; g = 1; b = 0; a = 1;
+            }
+            void Blue() {
+                r = 0; g = 0; b = 1; a = 1;
+            }
+            void Cyan() {
+                r = 0; g = 1; b = 1; a = 1;
+            }
+            void Yellow() {
+                r = 1; g = 1; b = 0; a = 0;
+            }
+        };
+        struct Vertex {
+            static constexpr int componentsNumber = 8;
+            union {
+                struct {
+                    // x, y for position
+                    // u, v for texture coordinates
+                    // r, g, b, a for color
+                    float x, y;
+                    float u, v;
+                    union {
+                        float r, g, b, a;
+                        Color color;
+                    };
+                };
+                float data[componentsNumber];
+            };
+
+            // Returns an empty Vertex
+            static Vertex Zero() {
+                Vertex v;
+                v.Empty();
+                return v;
+            }
+            // Empties the vertex
+            void Empty() {
+                for(int i = 0; i < componentsNumber; i++) {
+                    data[i] = 0.0f;
+                }
+            }
+            void TopLeft() {
+                x = 0; y = 0;
+            }
+            void TopRight() {
+                x = 1; y = 0;
+            }
+            void BottomLeft() {
+                x = 0; y = 1;
+            }
+            void BottomRight() {
+                x = 1; y = 1;
+            }
+            void TextTopLeft() {
+                u = 0; v = 0;
+            }
+            void TextTopRight() {
+                u = 1; v = 0;
+            }
+            void TextBottomLeft() {
+                u = 0; v = 1;
+            }
+            void TextBottomRight() {
+                u = 1; v = 1;
+            }
+        };
+        struct Quad {
+            // d___c
+            // | / |
+            // a___b
+            Vertex a, b, c, d;
+        };
         struct Renderer {
             // What OpenGL works with...
             // Screen                 Textures
@@ -460,11 +551,75 @@ namespace Win32 {
             // |                 |    |                 |    0___1
             // ( 0, 1)_____( 1, 1)    ( 0, 1)_____( 1, 1)
 
-            // A single texture unit for now
-            GLuint textureHandle;
+            static constexpr unsigned long maxQuads = 1000;
+            static constexpr unsigned long maxVertices = maxQuads * 4;
+            static constexpr unsigned long maxIndices = maxQuads * 6;
+            GLfloat textureDimensions[2];
+            unsigned long quadsToRender = 0;
 
-            void LoadTexture(GLvoid* data, GLsizei w, GLsizei h) {
-                glBindTexture(GL_TEXTURE_2D, textureHandle);
+            GLuint textureObject = 0;
+            GLuint vertexArrayObject = 0;
+            GLuint elementBufferObject = 0;
+            GLuint vertexBufferObject = 0;
+            GLuint vertexShaderObject = 0;
+            GLuint fragmentShaderObject = 0;
+            GLuint shaderProgramObject = 0;
+
+            
+            Vertex vertexBuffer[maxVertices];
+
+            bool textureLoaded = false;
+
+            enum shaderType { FragmentShader, VertexShader };
+            void LoadShader(const char* shaderSource, unsigned long sourceSize, shaderType type) {
+                if (type == shaderType::FragmentShader) {
+                    fragmentShaderObject = glCreateShader(GL_FRAGMENT_SHADER);
+                    glShaderSource(fragmentShaderObject, 1, &shaderSource, NULL);
+                    glCompileShader(fragmentShaderObject);
+                    int success;
+                    glGetShaderiv(fragmentShaderObject, GL_COMPILE_STATUS, &success);
+                    if(success == 0) {
+                        char info[512];
+                        glGetShaderInfoLog(fragmentShaderObject, 512, NULL, info);
+                        FormattedPrint("Error compiling fragment shader:\n\t%s", info);
+                    }
+                }
+                else if (type == shaderType::VertexShader) {
+                    vertexShaderObject = glCreateShader(GL_VERTEX_SHADER);
+                    glShaderSource(vertexShaderObject, 1, &shaderSource, NULL);
+                    glCompileShader(vertexShaderObject);
+                    int success;
+                    glGetShaderiv(vertexShaderObject, GL_COMPILE_STATUS, &success);
+                    if(success == 0) {
+                        char info[512];
+                        glGetShaderInfoLog(vertexShaderObject, 512, NULL, info);
+                        FormattedPrint("Error compiling vertex shader:\n\t%s", info);
+                    }
+                }
+                GetErrors(__FUNCTION__);
+            }
+
+            void GenerateShaderProgram() {
+                shaderProgramObject = glCreateProgram();
+                glAttachShader(shaderProgramObject, vertexShaderObject);
+                glAttachShader(shaderProgramObject, fragmentShaderObject);
+                glLinkProgram(shaderProgramObject);
+                int success;
+                glGetProgramiv(shaderProgramObject, GL_LINK_STATUS, &success);
+                if(success == 0) {
+                    char info[512];
+                    glGetProgramInfoLog(shaderProgramObject, 512, NULL, info);
+                    FormattedPrint("Error linking shader program:\n\t%s", info);
+                }
+                glDeleteShader(vertexShaderObject);
+                glDeleteShader(fragmentShaderObject);
+                GetErrors(__FUNCTION__);
+            }
+            
+            void LoadTexture(void* data, GLsizei w, GLsizei h) {
+                textureDimensions[0] = w;
+                textureDimensions[0] = h;
+                glBindTexture(GL_TEXTURE_2D, textureObject);
                 glTexImage2D(GL_TEXTURE_2D, 0, 4, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
                 glBindTexture(GL_TEXTURE_2D, 0);
                 GetErrors(__FUNCTION__);
@@ -474,18 +629,99 @@ namespace Win32 {
                 // Something about windows and framerates, dont remember, probably vertical sync
                 wglSwapIntervalEXT(1);
                 
-                // Enable textures
+                // Configure textures
                 // Load them later with LoadTexture()
                 glEnable(GL_TEXTURE_2D);
                 glActiveTexture(GL_TEXTURE0);
-                glGenTextures(1, &textureHandle);
+                glGenTextures(1, &textureObject);
                 glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
                 glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+                
+                // Configure Blending
+                glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ZERO);
+
+                // Generate the vertex array object and configure it
+                glGenVertexArrays(1, &vertexArrayObject);
+                glBindVertexArray(vertexArrayObject);
+
+                // Generate an element buffer object for the indices
+                glGenBuffers(1, &elementBufferObject);
+                glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, elementBufferObject);
+                // It's an static buffer so we can just load it now on initialization and forget about it
+                unsigned long indices[maxIndices];
+                for (int i = 0; i < maxQuads; i++) {
+                    int vertex = i * 4; // 4 vertices per quad
+                    int index = i * 6; // 6 indices per quad
+                    indices[index + 0] = vertex + 0;
+                    indices[index + 1] = vertex + 1;
+                    indices[index + 2] = vertex + 2;
+                    indices[index + 3] = vertex + 0;
+                    indices[index + 4] = vertex + 2;
+                    indices[index + 5] = vertex + 3;
+                }
+                glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(unsigned long) * maxIndices, indices, GL_STATIC_DRAW);
+                
+                // vertex buffer object
+                glGenBuffers(1, &vertexBufferObject);
+                glBindBuffer(GL_ARRAY_BUFFER, vertexBufferObject);
+                for (int i = 0; i < maxVertices; i++) {
+                    vertexBuffer[i].Empty();
+                }
+                glBufferData(GL_ARRAY_BUFFER, sizeof(Vertex) * maxVertices, vertexBuffer, GL_DYNAMIC_DRAW);
+
+                // Configure the vertex layer
+                glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(0));
+                glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(2 * sizeof(float)));
+                glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(4 * sizeof(float)));
+                glEnableVertexAttribArray(0);
+                glEnableVertexAttribArray(1);
+                glEnableVertexAttribArray(2);
+
+                // Finish, unbind everything
+                glBindVertexArray(0);
+                glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+                glBindBuffer(GL_ARRAY_BUFFER, 0);
+            }
+
+            void Render(unsigned long clientWidth, unsigned long clientHeight, Color clearColor, HDC deviceContextHandle) {
+                glViewport(0, 0, clientWidth, clientHeight);
+                glClearColor(clearColor.r, clearColor.g, clearColor.b, clearColor.a);
+                glClear(GL_COLOR_BUFFER_BIT);
+
+                #define ToColumnMajor(v0,v1,v2,v3,v4,v5,v6,v7,v8,v9,v10,v11,v12,v13,v14,v15) v0,v4,v8,v12,v1,v5,v9,v13,v2,v6,v10,v14,v3,v7,v11,v15
+                GLfloat w = 2.0f/(float)clientWidth;
+                GLfloat h = 2.0f/(float)clientHeight;
+                GLfloat projectionMatrix[] = { ToColumnMajor(
+                    w, 0, 0, -1,
+                    0, -h, 0, 1,
+                    0, 0, 1, 0,
+                    0, 0, 0, 1
+                )};
+                #undef ToColumnMajor
+
+                glBindVertexArray(vertexArrayObject);
+                glBindTexture(GL_TEXTURE_2D, textureObject);
+                glBindBuffer(GL_ARRAY_BUFFER, vertexBufferObject);
+                // GetErrors("1");
+                glBufferData(GL_ARRAY_BUFFER, sizeof(Vertex) * 4 * quadsToRender, vertexBuffer, GL_DYNAMIC_DRAW);
+                // GetErrors("2");
+                glUseProgram(shaderProgramObject);
+                // GetErrors("3");
+                GLint mvpUniformPosition = glGetUniformLocation(shaderProgramObject, "mvp");
+                GLint textureDimensionsUniformPosition = glGetUniformLocation(shaderProgramObject, "texture_dimensions");
+                glUniformMatrix4fv(mvpUniformPosition, 1, GL_FALSE, projectionMatrix);
+                glUniform2fv(textureDimensionsUniformPosition, 1, textureDimensions);
+                glDrawElements(GL_TRIANGLES, quadsToRender * 6, GL_UNSIGNED_INT, 0);
+                glBindVertexArray(0);
+                glBindTexture(GL_TEXTURE_2D, 0);
+                glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+                Win32::SwapPixelBuffers(deviceContextHandle);
+                quadsToRender = 0;
             }
         };
     }
 }
-
 
 // Warning: If I define WIN32_LEAN_AND_MEAN then I lose the contents of mmeapi.h
 // . Which contains WAVEFORMATEX and other things I need for DirectSound.
@@ -503,7 +739,7 @@ namespace Win32 {
 #include <windows.h>
 #include <mmsystem.h>
 #include <DSound.h>
-#pragma comment(lib, "Gdi32.lib")
+#pragma comment(lib, "gdi32.lib")
 namespace Win32 {
     namespace DSOUND {
         // https://docs.microsoft.com/en-us/previous-versions/windows/desktop/mt708921(v=vs.85)
@@ -654,8 +890,6 @@ namespace Win32 {
                 int bytesToWrite;
                 // FIXME: Just for now
                 int framesPerSecond = 60;
-                int samplesPerSecond = samplesPerSecond;
-                int bytesPerSample = bytesPerSample;
 
                 int samplesPerFrame = (int)((float)samplesPerSecond/(float)framesPerSecond);
                 int bytesPerFrame = samplesPerFrame * bytesPerSample;
@@ -814,90 +1048,79 @@ namespace Win32 {
     }
 }
 
-namespace Buffers {
-    struct BufferHeader {
-        unsigned long long SizeInBytes;
-        unsigned long long SizeInTs;
-    };
-    template <typename T>
-    struct Buffer {
-        BufferHeader header;
-        T* data;
-        void Empty() {
-            header.SizeInBytes = 0;
-            header.SizeInTs = 0;
-        }
-    };
-}
+#include "resources.h"
+int WinMain(HINSTANCE hInst, HINSTANCE hInstPrev, PSTR cmdline, int cmdshow) {
+    bool isExternalConsole = Win32::GetConsole();
+    const char windowClassName[] = "windowClass";
+    auto windowClass = Win32::MakeWindowClass(windowClassName, Win32::BasicWindowProc, hInst);
+    auto windowHandle = Win32::MakeWindow(windowClassName, "MyWindow!", hInst, cmdshow);
+    auto deviceContextHandle = Win32::GetDeviceContextHandle(windowHandle);
+    
+    int windowW, windowH, windowX, windowY;
+    Win32::GetWindowSizeAndPosition(windowHandle, &windowW, &windowH, &windowX, &windowY, false);
+    int clientW, clientH;
+    Win32::GetClientSize(windowHandle, &clientW, &clientH, false);
 
-namespace Vertices {
-    struct Vertex {
-        // Static
-        static constexpr int Components = 8;
-        static Vertex Zero() {
-            Vertex v;
-            v.Empty();
-            return v;
-        }
-        // Util
-        void Empty() {
-            for(int i = 0; i < Components; i++) {
-                data[i] = 0.0f;
+    if (isExternalConsole) {
+        HWND consoleWindowHandle = GetConsoleWindow();
+        int consoleW, consoleH, consoleX, consoleY;
+        Win32::GetWindowSizeAndPosition(consoleWindowHandle, &consoleW, &consoleH, &consoleX, &consoleY, false);
+        // Moving the console doesn't redraw it, so parts of the window that were originally hidden won't be rendered.
+        MoveWindow(consoleWindowHandle, windowX+windowW, windowY, consoleW, consoleH, 0);
+        // So after moving the window, redraw it.
+        // https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-redrawwindow
+        // "If both the hrgnUpdate and lprcUpdate parameters are NULL, the entire client area is added to the update region."
+        RedrawWindow(consoleWindowHandle, NULL, NULL, RDW_INVALIDATE);
+    }
+    
+    Win32::GL::InitializeWGlContext(deviceContextHandle);
+    Win32::GL::GetGLExtensions();
+    Win32::GL::Renderer r;
+    r.Initialize();
+    r.LoadTexture((void*)texture_data, texture_width, texture_height);
+    r.LoadShader(fshader, fshader_size, Win32::GL::Renderer::shaderType::FragmentShader);
+    r.LoadShader(vshader, vshader_size, Win32::GL::Renderer::shaderType::VertexShader);
+    r.GenerateShaderProgram();
+    bool running = true;
+    // Main loop
+    while (running) {
+        MSG msg;
+        while (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
+            TranslateMessage(&msg);
+            DispatchMessage(&msg);
+            switch (msg.message) {
+                case WM_QUIT: {
+                    running = false;
+                } break;
+                case WM_SIZE: {
+                } break;
             }
         }
-        void Red() {
-            r = 1; g = 0; b = 0; a = 1;
-        }
-        void Green() {
-            r = 0; g = 1; b = 0; a = 1;
-        }
-        void Blue() {
-            r = 0; g = 0; b = 1; a = 1;
-        }
-        void Yellow() {
-            r = 0; g = 1; b = 1; a = 1;
-        }
-        void TopLeft() {
-            x = 0; y = 0;
-        }
-        void TopRight() {
-            x = 1; y = 0;
-        }
-        void BottomLeft() {
-            x = 0; y = 1;
-        }
-        void BottomRight() {
-            x = 1; y = 1;
-        }
-        void TextTopLeft() {
-            u = 0; v = 0;
-        }
-        void TextTopRight() {
-            u = 1; v = 0;
-        }
-        void TextBottomLeft() {
-            u = 0; v = 1;
-        }
-        void TextBottomRight() {
-            u = 1; v = 1;
-        }
-        // Data
-        union {
-            float data[Components];
-            // Definition
-            struct {
-                // 2 for position
-                float x;
-                float y;
-                // 2 for texture uv
-                float u;
-                float v;
-                // 4 for rgba
-                float r;
-                float g;
-                float b;
-                float a;
-            };
-        };
-    };
+        r.vertexBuffer[0].color.Red();
+        r.vertexBuffer[0].x = 0;
+        r.vertexBuffer[0].y = 300;
+        r.vertexBuffer[0].u = 0;
+        r.vertexBuffer[0].v = 0;
+        r.vertexBuffer[1].color.Green();
+        r.vertexBuffer[1].x = 300;
+        r.vertexBuffer[1].y = 300;
+        r.vertexBuffer[1].u = texture_width;
+        r.vertexBuffer[1].v = 0;
+        r.vertexBuffer[2].color.Blue();
+        r.vertexBuffer[2].x = 300;
+        r.vertexBuffer[2].y = 0;
+        r.vertexBuffer[2].u = texture_width;
+        r.vertexBuffer[2].v = texture_height;
+        r.vertexBuffer[3].color.Yellow();
+        r.vertexBuffer[3].x = 0;
+        r.vertexBuffer[3].y = 0;
+        r.vertexBuffer[3].u = 0;
+        r.vertexBuffer[3].v = texture_height;
+        r.quadsToRender++;
+        Win32::GL::Color clearColor;
+        clearColor.Cyan();
+        r.Render(clientW, clientH, clearColor, deviceContextHandle);
+        Win32::GL::GetErrors("Main Loop");
+        // running = false;
+    }
 }
