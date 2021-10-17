@@ -475,7 +475,7 @@ namespace Win32 {
                 r = 1; g = 1; b = 0; a = 1;
             }
             void Neutral() {
-                r = 1; g = 1; b = 1; a = 0;
+                r = 1; g = 1; b = 1; a = 1;
             }
         };
         struct Vertex {
@@ -642,6 +642,7 @@ namespace Win32 {
                 glBindTexture(GL_TEXTURE_2D, 0);
                 
                 // Configure Blending
+                glEnable(GL_BLEND);
                 glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ZERO);
 
                 // Generate the vertex array object and configure it
