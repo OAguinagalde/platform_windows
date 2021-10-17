@@ -459,23 +459,35 @@ namespace Win32 {
 
         struct Color {
             float r, g, b, a;
-            void Red() {
-                r = 1; g = 0; b = 0; a = 1;
+            static Color Red() {
+                Color c;
+                c.r = 1; c.g = 0; c.b = 0; c.a = 1;
+                return c;
             }
-            void Green() {
-                r = 0; g = 1; b = 0; a = 1;
+            static Color Green() {
+                Color c;
+                c.r = 0; c.g = 1; c.b = 0; c.a = 1;
+                return c;
             }
-            void Blue() {
-                r = 0; g = 0; b = 1; a = 1;
+            static Color Blue() {
+                Color c;
+                c.r = 0; c.g = 0; c.b = 1; c.a = 1;
+                return c;
             }
-            void Cyan() {
-                r = 0; g = 1; b = 1; a = 1;
+            static Color Cyan() {
+                Color c;
+                c.r = 0; c.g = 1; c.b = 1; c.a = 1;
+                return c;
             }
-            void Yellow() {
-                r = 1; g = 1; b = 0; a = 1;
+            static Color Yellow() {
+                Color c;
+                c.r = 1; c.g = 1; c.b = 0; c.a = 1;
+                return c;
             }
-            void Neutral() {
-                r = 1; g = 1; b = 1; a = 1;
+            static Color White() {
+                Color c;
+                c.r = 1; c.g = 1; c.b = 1; c.a = 1;
+                return c;
             }
         };
         struct Vertex {
@@ -697,10 +709,10 @@ namespace Win32 {
                 GLfloat w = 2.0f/(float)clientWidth;
                 GLfloat h = 2.0f/(float)clientHeight;
                 GLfloat projectionMatrix[] = { ToColumnMajor(
-                    w, 0, 0, -1,
-                    0, -h, 0, 1,
-                    0, 0, 1, 0,
-                    0, 0, 0, 1
+                    w,  0,  0, -1,
+                    0, -h,  0,  1,
+                    0,  0,  1,  0,
+                    0,  0,  0,  1
                 )};
                 #undef ToColumnMajor
 
@@ -1099,31 +1111,42 @@ int WinMain(HINSTANCE hInst, HINSTANCE hInstPrev, PSTR cmdline, int cmdshow) {
             }
         }
         // r.vertexBuffer[0].color.Red();
-        r.vertexBuffer[0].color.Neutral();
+        r.vertexBuffer[0].color = Win32::GL::Color::White();
         r.vertexBuffer[0].x = 0;
         r.vertexBuffer[0].y = texture_height;
         r.vertexBuffer[0].u = 0;
         r.vertexBuffer[0].v = texture_height;
         // r.vertexBuffer[1].color.Green();
-        r.vertexBuffer[1].color.Neutral();
+        r.vertexBuffer[1].color = Win32::GL::Color::White();
         r.vertexBuffer[1].x = texture_width;
         r.vertexBuffer[1].y = texture_height;
         r.vertexBuffer[1].u = texture_width;
         r.vertexBuffer[1].v = texture_height;
         // r.vertexBuffer[2].color.Blue();
-        r.vertexBuffer[2].color.Neutral();
+        r.vertexBuffer[2].color = Win32::GL::Color::White();
         r.vertexBuffer[2].x = texture_width;
         r.vertexBuffer[2].y = 0;
         r.vertexBuffer[2].u = texture_width;
         r.vertexBuffer[2].v = 0;
         // r.vertexBuffer[3].color.Yellow();
-        r.vertexBuffer[3].color.Neutral();
+        r.vertexBuffer[3].color = Win32::GL::Color::White();
         r.vertexBuffer[3].x = 0;
         r.vertexBuffer[3].y = 0;
         r.vertexBuffer[3].u = 0;
         r.vertexBuffer[3].v = 0;
         r.quadsToRender++;
         
+        // TODO:
+        // TextureDescription td;
+        // td.pos = {0, 0};
+        // td.size = {texture_width, texture_height};
+        // QuadDescription desc;
+        // desc.pos = {0, 0};
+        // desc.size = {texture_width, texture_height};
+        // desc.texture = td;
+        // desc.color = Color.White
+        // r.AddQuad(desc);
+
         // print the vertex buffer
         // for(int i = 0; i < r.quadsToRender * 4; i++) {
         //     Win32::FormattedPrint("Vertex %d: %04.4f, %04.4f, %04.4f, %04.4f, %04.4f, %04.4f, %04.4f, %04.4f\n", i,
@@ -1131,9 +1154,7 @@ int WinMain(HINSTANCE hInst, HINSTANCE hInstPrev, PSTR cmdline, int cmdshow) {
         //         r.vertexBuffer[i].data[4], r.vertexBuffer[i].data[5], r.vertexBuffer[i].data[6], r.vertexBuffer[i].data[7]);
         // }
 
-        Win32::GL::Color clearColor;
-        clearColor.Cyan();
-        r.Render(clientW, clientH, clearColor, deviceContextHandle);
+        r.Render(clientW, clientH, Win32::GL::Color::White(), deviceContextHandle);
         
         if (false && Win32::GL::GetErrors("Main Loop")) {
             Win32::Print("Exiting because there were gl errors!");
