@@ -16,8 +16,6 @@ const char vshader[] =
 "{\n"
 "    texture_uv.x = vertex_uv.x / texture_dimensions.x;\n"
 "    texture_uv.y = vertex_uv.y / texture_dimensions.y;\n"
-// "    texture_uv.x = vertex_uv.x;\n"
-// "    texture_uv.y = vertex_uv.y;\n"
 "    color = vertex_color;\n"
 "    gl_Position = mvp * vec4(vertex_position, 0.0, 1.0);\n"
 "}";
@@ -35,8 +33,7 @@ const char fshader[] =
 "\n"
 "void main()\n"
 "{\n"
-// "    FragColor = texture(texture_sampler, texture_uv) * color;\n"
-"    FragColor = color;\n"
+"    FragColor = texture(texture_sampler, texture_uv) * color;\n"
 "}";
 const int fshader_size = sizeof(fshader);
 

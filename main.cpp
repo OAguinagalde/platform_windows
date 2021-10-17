@@ -1,12 +1,6 @@
-/*
-{
-    "HasMain": false,
-    "Includes": [ "Hola", "Que", "Tal" ]
-}
-*/
-
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+#include <strsafe.h>
 #pragma comment(lib, "User32")
 #include <cassert>
 #include <cstdlib>
@@ -35,11 +29,15 @@ namespace Win32 {
     }
 
     // printf but wrong lol
+    // Max output is 1024 bytes long!
     void FormattedPrint(const char* format, ...) {
-        static char buffer[1024];
+        static const size_t buffer_size = 1024;
+        static char buffer[buffer_size];
         va_list args;
         va_start(args, format);
-        wvsprintf((LPSTR) buffer, format, args);
+        // https://docs.microsoft.com/en-us/windows/win32/menurc/strsafe-ovw
+        // https://docs.microsoft.com/en-us/windows/win32/api/strsafe/nf-strsafe-stringcbvprintfa
+        StringCbVPrintfA(buffer, buffer_size, format, args);
         va_end(args);
         Print(buffer);
     }
@@ -351,7 +349,7 @@ namespace Win32 {
         #undef DeclareExtension
 
         // Loops through and print all the errors related to OpenGL
-        void GetErrors() {
+        bool GetErrors() {
             bool noErrors = true;
             GLenum opengl_error = 0;
             while ((opengl_error = glGetError()) != GL_NO_ERROR) {
@@ -371,12 +369,13 @@ namespace Win32 {
             if (noErrors) {
                 Print("No errors\n");
             }
+            return !noErrors;
         }
 
         // Loops through and print (Labeled) all the errors related to OpenGL
-        void GetErrors(const char* label) {
+        bool GetErrors(const char* label) {
             FormattedPrint("%s: ", label);
-            GetErrors();
+            return GetErrors();
         }
 
         // Returns the pointer to the function given or returns NULL on failure
@@ -473,7 +472,10 @@ namespace Win32 {
                 r = 0; g = 1; b = 1; a = 1;
             }
             void Yellow() {
-                r = 1; g = 1; b = 0; a = 0;
+                r = 1; g = 1; b = 0; a = 1;
+            }
+            void Neutral() {
+                r = 1; g = 1; b = 1; a = 0;
             }
         };
         struct Vertex {
@@ -618,7 +620,7 @@ namespace Win32 {
             
             void LoadTexture(void* data, GLsizei w, GLsizei h) {
                 textureDimensions[0] = w;
-                textureDimensions[0] = h;
+                textureDimensions[1] = h;
                 glBindTexture(GL_TEXTURE_2D, textureObject);
                 glTexImage2D(GL_TEXTURE_2D, 0, 4, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
                 glBindTexture(GL_TEXTURE_2D, 0);
@@ -632,10 +634,12 @@ namespace Win32 {
                 // Configure textures
                 // Load them later with LoadTexture()
                 glEnable(GL_TEXTURE_2D);
-                glActiveTexture(GL_TEXTURE0);
                 glGenTextures(1, &textureObject);
+                glBindTexture(GL_TEXTURE_2D, textureObject);
+                glActiveTexture(GL_TEXTURE0);
                 glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
                 glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+                glBindTexture(GL_TEXTURE_2D, 0);
                 
                 // Configure Blending
                 glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ZERO);
@@ -702,11 +706,8 @@ namespace Win32 {
                 glBindVertexArray(vertexArrayObject);
                 glBindTexture(GL_TEXTURE_2D, textureObject);
                 glBindBuffer(GL_ARRAY_BUFFER, vertexBufferObject);
-                // GetErrors("1");
                 glBufferData(GL_ARRAY_BUFFER, sizeof(Vertex) * 4 * quadsToRender, vertexBuffer, GL_DYNAMIC_DRAW);
-                // GetErrors("2");
                 glUseProgram(shaderProgramObject);
-                // GetErrors("3");
                 GLint mvpUniformPosition = glGetUniformLocation(shaderProgramObject, "mvp");
                 GLint textureDimensionsUniformPosition = glGetUniformLocation(shaderProgramObject, "texture_dimensions");
                 glUniformMatrix4fv(mvpUniformPosition, 1, GL_FALSE, projectionMatrix);
@@ -1096,31 +1097,46 @@ int WinMain(HINSTANCE hInst, HINSTANCE hInstPrev, PSTR cmdline, int cmdshow) {
                 } break;
             }
         }
-        r.vertexBuffer[0].color.Red();
+        // r.vertexBuffer[0].color.Red();
+        r.vertexBuffer[0].color.Neutral();
         r.vertexBuffer[0].x = 0;
-        r.vertexBuffer[0].y = 300;
+        r.vertexBuffer[0].y = texture_height;
         r.vertexBuffer[0].u = 0;
-        r.vertexBuffer[0].v = 0;
-        r.vertexBuffer[1].color.Green();
-        r.vertexBuffer[1].x = 300;
-        r.vertexBuffer[1].y = 300;
+        r.vertexBuffer[0].v = texture_height;
+        // r.vertexBuffer[1].color.Green();
+        r.vertexBuffer[1].color.Neutral();
+        r.vertexBuffer[1].x = texture_width;
+        r.vertexBuffer[1].y = texture_height;
         r.vertexBuffer[1].u = texture_width;
-        r.vertexBuffer[1].v = 0;
-        r.vertexBuffer[2].color.Blue();
-        r.vertexBuffer[2].x = 300;
+        r.vertexBuffer[1].v = texture_height;
+        // r.vertexBuffer[2].color.Blue();
+        r.vertexBuffer[2].color.Neutral();
+        r.vertexBuffer[2].x = texture_width;
         r.vertexBuffer[2].y = 0;
         r.vertexBuffer[2].u = texture_width;
-        r.vertexBuffer[2].v = texture_height;
-        r.vertexBuffer[3].color.Yellow();
+        r.vertexBuffer[2].v = 0;
+        // r.vertexBuffer[3].color.Yellow();
+        r.vertexBuffer[3].color.Neutral();
         r.vertexBuffer[3].x = 0;
         r.vertexBuffer[3].y = 0;
         r.vertexBuffer[3].u = 0;
-        r.vertexBuffer[3].v = texture_height;
+        r.vertexBuffer[3].v = 0;
         r.quadsToRender++;
+        
+        // print the vertex buffer
+        // for(int i = 0; i < r.quadsToRender * 4; i++) {
+        //     Win32::FormattedPrint("Vertex %d: %04.4f, %04.4f, %04.4f, %04.4f, %04.4f, %04.4f, %04.4f, %04.4f\n", i,
+        //         r.vertexBuffer[i].data[0], r.vertexBuffer[i].data[1], r.vertexBuffer[i].data[2], r.vertexBuffer[i].data[3],
+        //         r.vertexBuffer[i].data[4], r.vertexBuffer[i].data[5], r.vertexBuffer[i].data[6], r.vertexBuffer[i].data[7]);
+        // }
+
         Win32::GL::Color clearColor;
         clearColor.Cyan();
         r.Render(clientW, clientH, clearColor, deviceContextHandle);
-        Win32::GL::GetErrors("Main Loop");
-        // running = false;
+        
+        if (false && Win32::GL::GetErrors("Main Loop")) {
+            Win32::Print("Exiting because there were gl errors!");
+            running = false;
+        }
     }
 }
