@@ -457,100 +457,164 @@ namespace Win32 {
             #undef InitializeExtension
         }
 
-        struct Color {
-            float r, g, b, a;
-            static Color Red() {
-                Color c;
-                c.r = 1; c.g = 0; c.b = 0; c.a = 1;
-                return c;
-            }
-            static Color Green() {
-                Color c;
-                c.r = 0; c.g = 1; c.b = 0; c.a = 1;
-                return c;
-            }
-            static Color Blue() {
-                Color c;
-                c.r = 0; c.g = 0; c.b = 1; c.a = 1;
-                return c;
-            }
-            static Color Cyan() {
-                Color c;
-                c.r = 0; c.g = 1; c.b = 1; c.a = 1;
-                return c;
-            }
-            static Color Yellow() {
-                Color c;
-                c.r = 1; c.g = 1; c.b = 0; c.a = 1;
-                return c;
-            }
-            static Color White() {
-                Color c;
-                c.r = 1; c.g = 1; c.b = 1; c.a = 1;
-                return c;
-            }
-        };
-        struct Vertex {
-            static constexpr int componentsNumber = 8;
-            union {
-                struct {
-                    // x, y for position
-                    // u, v for texture coordinates
-                    // r, g, b, a for color
-                    float x, y;
-                    float u, v;
-                    union {
-                        float r, g, b, a;
-                        Color color;
+        struct Renderer {
+            struct Color {
+                float r, g, b, a;
+                Color() : r(0.0f), g(0.0f), b(0.0f), a(0.0f) {}
+                Color(float r, float g, float b, float a) : r(r), g(g), b(b), a(a) {}
+                Color Red() {
+                    r = 1.0f; g = 0.0f; b = 0.0f; a = 1.0f;
+                    return *this;
+                }
+                Color Green() {
+                    r = 0.0f; g = 1.0f; b = 0.0f; a = 1.0f;
+                    return *this;
+                }
+                Color Blue() {
+                    r = 0.0f; g = 0.0f; b = 1.0f; a = 1.0f;
+                    return *this;
+                }
+                Color Cyan() {
+                    r = 0.0f; g = 1.0f; b = 1.0f; a = 1.0f;
+                    return *this;
+                }
+                Color Yellow() {
+                    r = 1.0f; g = 1.0f; b = 0.0f; a = 1.0f;
+                    return *this;
+                }
+                Color White() {
+                    r = 1.0f; g = 1.0f; b = 1.0f; a = 1.0f;
+                    return *this;
+                }
+                Color Black() {
+                    r = 0.0f; g = 0.0f; b = 0.0f; a = 1.0f;
+                    return *this;
+                }
+            };
+            // TODO: Delete this forward declaration
+            struct Point2f;
+            struct Point2i {
+                int x, y;
+                Point2i() : x(0), y(0) {}
+                Point2i(int x, int y) : x(x), y(y) {}
+                Point2i(Point2i&) = default;
+                Point2i Zero() { x = 0; y = 0; return *this; }
+                Point2i operator+(Point2i right) {
+                    return Point2i(x + right.x, y + right.y);
+                }
+                Point2i operator+(Point2f right) {
+                    return Point2i(x + (int)right.x, y + (int)right.y);
+                }
+                Point2f toPoint2f() {
+                    return Point2f((float)x, (float)y);
+                }
+            };
+            struct Point2f {
+                float x, y;
+                Point2f() : x(0.0f), y(0.0f) { }
+                Point2f(float x, float y) : x(x), y(y) { }
+                Point2f(Point2f&) = default;
+                Point2f Zero() { x = 0.0f; y = 0.0f; return *this; }
+                Point2f operator+(Point2f right) {
+                    return Point2f(x + right.x, y + right.y);
+                }
+                Point2f operator+(Point2i right) {
+                    return Point2f(x + (float)right.x, y + (float)right.y);
+                }
+                Point2i toPoint2i() {
+                    return Point2i((int)x, (int)y);
+                }
+            };
+            // Vertex as in "data vertex" in a graphics card
+            struct Vertex {
+                static constexpr int componentsNumber = 8;
+                union {
+                    struct {
+                        union {
+                            // position
+                            struct {
+                                float x, y;
+                            };
+                            Point2f position;
+                        };
+                        union {
+                            // texture
+                            struct {
+                                float u, v;
+                            };
+                            Point2f texture;
+                        };
+                        union {
+                            // color
+                            struct {
+                                float r, g, b, a;
+                            };
+                            Color color;
+                        };
+                    };
+                    float data[componentsNumber];
+                };
+                Vertex() { Zero(); }
+                Vertex(Point2f pos, Point2f uv, Color col) : position(pos), texture(uv), color(col) {}
+                Vertex(Vertex&) = default;
+                Vertex(float x, float y, float u, float v, float r, float g, float b, float a) : x(x), y(y), u(u), v(v), r(r), g(g), b(b), a(a) {}
+                // Empties the vertex
+                Vertex Zero() {
+                    for(int i = 0; i < componentsNumber; i++) {
+                        data[i] = 0.0f;
+                    }
+                    return *this;
+                }
+                void Print() {
+                    Win32::FormattedPrint(
+                        "Pos {%f, %f} Tex {%f, %f} Col {%f, %f, %f, %f}\n",
+                        x, y, u, v, r, g, b, a
+                    );
+                }
+            };
+            struct Texture {
+                union {
+                    struct {
+                        int u1, v1, u2, v2;
+                    };
+                    struct {
+                        Point2i topLeft, bottomRight;
                     };
                 };
-                float data[componentsNumber];
+                Texture() { Zero(); }
+                Texture(Point2i topLeft, Point2i bottomRight) : topLeft(topLeft), bottomRight(bottomRight) {}
+                Texture(int u1, int v1, int u2, int v2) : u1(u1), v1(v1), u2(u2), v2(v2) {}
+                Texture(Texture&) = default;
+                Texture Zero() { u1 = 0; v1 = 0; u2 = 0; v2 = 0; return *this; }
             };
-
-            // Returns an empty Vertex
-            static Vertex Zero() {
-                Vertex v;
-                v.Empty();
-                return v;
-            }
-            // Empties the vertex
-            void Empty() {
-                for(int i = 0; i < componentsNumber; i++) {
-                    data[i] = 0.0f;
+            struct Quad {
+                // d___c
+                // | / |
+                // a___b
+                Vertex a, b, c, d;
+                Quad() { Zero(); }
+                Quad(Vertex a, Vertex b, Vertex c, Vertex d) : a(a), b(b), c(c), d(d) {}
+                Quad(Point2f position, Point2i size, Texture texture, Color color) {
+                    d = Vertex(position, texture.topLeft.toPoint2f(), color);
+                    b = Vertex(position + size, texture.bottomRight.toPoint2f(), color);
+                    a = Vertex(Point2f(position.x, position.y + (float)size.y), Point2f((float)texture.topLeft.x, (float)texture.bottomRight.y), color);
+                    c = Vertex(Point2f(position.x + (float)size.x, position.y), Point2f((float)texture.bottomRight.x, (float)texture.topLeft.y), color);
                 }
-            }
-            void TopLeft() {
-                x = 0; y = 0;
-            }
-            void TopRight() {
-                x = 1; y = 0;
-            }
-            void BottomLeft() {
-                x = 0; y = 1;
-            }
-            void BottomRight() {
-                x = 1; y = 1;
-            }
-            void TextTopLeft() {
-                u = 0; v = 0;
-            }
-            void TextTopRight() {
-                u = 1; v = 0;
-            }
-            void TextBottomLeft() {
-                u = 0; v = 1;
-            }
-            void TextBottomRight() {
-                u = 1; v = 1;
-            }
-        };
-        struct Quad {
-            // d___c
-            // | / |
-            // a___b
-            Vertex a, b, c, d;
-        };
-        struct Renderer {
+                Quad(Quad&) = default;
+                Quad Zero() {
+                    a.Zero();
+                    b.Zero();
+                    c.Zero();
+                    d.Zero();
+                    return *this;
+                }
+                void Print() {
+                    a.Print();
+                    b.Print();
+                    c.Print();
+                    d.Print();
+                }
+            };
             // What OpenGL works with...
             // Screen                 Textures
             // (-1, 1)_____( 1, 1)    ( 0, 1)_____( 1, 1)
@@ -584,7 +648,11 @@ namespace Win32 {
 
             bool textureLoaded = false;
 
-            enum shaderType { FragmentShader, VertexShader };
+            enum shaderType {
+                FragmentShader,
+                VertexShader
+            };
+
             void LoadShader(const char* shaderSource, unsigned long sourceSize, shaderType type) {
                 if (type == shaderType::FragmentShader) {
                     fragmentShaderObject = glCreateShader(GL_FRAGMENT_SHADER);
@@ -682,7 +750,7 @@ namespace Win32 {
                 glGenBuffers(1, &vertexBufferObject);
                 glBindBuffer(GL_ARRAY_BUFFER, vertexBufferObject);
                 for (int i = 0; i < maxVertices; i++) {
-                    vertexBuffer[i].Empty();
+                    vertexBuffer[i].Zero();
                 }
                 glBufferData(GL_ARRAY_BUFFER, sizeof(Vertex) * maxVertices, vertexBuffer, GL_DYNAMIC_DRAW);
 
@@ -732,6 +800,14 @@ namespace Win32 {
 
                 Win32::SwapPixelBuffers(deviceContextHandle);
                 quadsToRender = 0;
+            }
+        
+            void AddQuad(Quad quad) {
+                vertexBuffer[quadsToRender+0] = quad.a;
+                vertexBuffer[quadsToRender+1] = quad.b;
+                vertexBuffer[quadsToRender+2] = quad.c;
+                vertexBuffer[quadsToRender+3] = quad.d;
+                quadsToRender++;
             }
         };
     }
@@ -1090,6 +1166,9 @@ int WinMain(HINSTANCE hInst, HINSTANCE hInstPrev, PSTR cmdline, int cmdshow) {
     Win32::GL::InitializeWGlContext(deviceContextHandle);
     Win32::GL::GetGLExtensions();
     Win32::GL::Renderer r;
+    using namespace Win32::GL;
+    using R = Renderer;
+
     r.Initialize();
     r.LoadTexture((void*)texture_data, texture_width, texture_height);
     r.LoadShader(fshader, fshader_size, Win32::GL::Renderer::shaderType::FragmentShader);
@@ -1110,51 +1189,27 @@ int WinMain(HINSTANCE hInst, HINSTANCE hInstPrev, PSTR cmdline, int cmdshow) {
                 } break;
             }
         }
-        // r.vertexBuffer[0].color.Red();
-        r.vertexBuffer[0].color = Win32::GL::Color::White();
-        r.vertexBuffer[0].x = 0;
-        r.vertexBuffer[0].y = texture_height;
-        r.vertexBuffer[0].u = 0;
-        r.vertexBuffer[0].v = texture_height;
-        // r.vertexBuffer[1].color.Green();
-        r.vertexBuffer[1].color = Win32::GL::Color::White();
-        r.vertexBuffer[1].x = texture_width;
-        r.vertexBuffer[1].y = texture_height;
-        r.vertexBuffer[1].u = texture_width;
-        r.vertexBuffer[1].v = texture_height;
-        // r.vertexBuffer[2].color.Blue();
-        r.vertexBuffer[2].color = Win32::GL::Color::White();
-        r.vertexBuffer[2].x = texture_width;
-        r.vertexBuffer[2].y = 0;
-        r.vertexBuffer[2].u = texture_width;
-        r.vertexBuffer[2].v = 0;
-        // r.vertexBuffer[3].color.Yellow();
-        r.vertexBuffer[3].color = Win32::GL::Color::White();
-        r.vertexBuffer[3].x = 0;
-        r.vertexBuffer[3].y = 0;
-        r.vertexBuffer[3].u = 0;
-        r.vertexBuffer[3].v = 0;
-        r.quadsToRender++;
+
+        static int A = 0;
+        static int B = 0;
+        A++;
+        A = A%texture_width;
+        B++;
+        B = B%texture_height;
         
-        // TODO:
-        // TextureDescription td;
-        // td.pos = {0, 0};
-        // td.size = {texture_width, texture_height};
-        // QuadDescription desc;
-        // desc.pos = {0, 0};
-        // desc.size = {texture_width, texture_height};
-        // desc.texture = td;
-        // desc.color = Color.White
-        // r.AddQuad(desc);
-
-        // print the vertex buffer
-        // for(int i = 0; i < r.quadsToRender * 4; i++) {
-        //     Win32::FormattedPrint("Vertex %d: %04.4f, %04.4f, %04.4f, %04.4f, %04.4f, %04.4f, %04.4f, %04.4f\n", i,
-        //         r.vertexBuffer[i].data[0], r.vertexBuffer[i].data[1], r.vertexBuffer[i].data[2], r.vertexBuffer[i].data[3],
-        //         r.vertexBuffer[i].data[4], r.vertexBuffer[i].data[5], r.vertexBuffer[i].data[6], r.vertexBuffer[i].data[7]);
-        // }
-
-        r.Render(clientW, clientH, Win32::GL::Color::White(), deviceContextHandle);
+        // TODO: make textures be a point + size not topleft bottomright
+        Renderer::Texture fullTexture(
+            Renderer::Point2i(A,B),
+            Renderer::Point2i(A+texture_width,B+texture_height)
+        );
+        
+        // TODO: Make a Quad Constructor that changes color gradually using static variables (+ a displacement so that I can potentially have many quads at a different point of the color scale) passed as a parameter
+        // R::Quad myQuad(R::Point2f(10, 10), R::Point2i(texture_width*3,texture_height*3), fullTexture, R::Color::Gradual, 1337);
+        R::Quad myQuad(R::Point2f(10, 10), R::Point2i(texture_width*3,texture_height*3), fullTexture, R::Color().White());
+        r.AddQuad(myQuad);
+        
+        // TODO: Add Text!
+        r.Render(clientW, clientH, Win32::GL::Renderer::Color().White(), deviceContextHandle);
         
         if (false && Win32::GL::GetErrors("Main Loop")) {
             Win32::Print("Exiting because there were gl errors!");
