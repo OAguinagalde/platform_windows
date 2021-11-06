@@ -228,9 +228,9 @@ namespace Win32 {
         // win32_ HeapFree(win32_ GetProcessHeap(), 0, (LPVOID) data);
     }
 
-    // uint64 cpuFrequencySeconds;
-    // uint64 cpuCounter;
-    // GetCpuTimeAndFrequency(&cpuCounter, &cpuFrequencySeconds);
+    // unsigned long long cpuFrequencySeconds;
+    // unsigned long long cpuCounter;
+    // GetCpuCounterAndFrequencySeconds(&cpuCounter, &cpuFrequencySeconds);
     void GetCpuCounterAndFrequencySeconds(unsigned long long* cpuCounter, unsigned long long* cpuFrequencySeconds) {
         LARGE_INTEGER counter;
         QueryPerformanceCounter(&counter);
@@ -251,16 +251,35 @@ namespace Win32 {
     
     // Given the previous cpu counter to compare with, and the cpu frequency (Use GetCpuCounterAndFrequencySeconds)
     // Calculate timeDifferenceMs and fps. Returns the current value of cpuCounter.
-    unsigned long long GetTimeDifferenceMsAndFPS(unsigned long long cpuPreviousCounter, unsigned long long cpuFrequencySeconds, unsigned long long* timeDifferenceMs, unsigned long long* fps) {
+    unsigned long long GetTimeDifferenceMsAndFPS(unsigned long long cpuPreviousCounter, unsigned long long cpuFrequencySeconds, double* timeDifferenceMs, unsigned long long* fps) {
         // Internal Counter at this point
         LARGE_INTEGER cpuCounter;
         QueryPerformanceCounter(&cpuCounter);
         // Difference since last update to this new update
         unsigned long long counterDifference = cpuCounter.QuadPart - cpuPreviousCounter;
         // Since we know the frequency we can calculate some times
-        *timeDifferenceMs = 1000 * counterDifference / cpuFrequencySeconds;
+        *timeDifferenceMs = 1000.0 * (double)counterDifference / (double)cpuFrequencySeconds;
         *fps = cpuFrequencySeconds / counterDifference;
         return cpuCounter.QuadPart;
+    }
+
+    bool GetConsoleCursorPosition(short *cursorX, short *cursorY) {
+        CONSOLE_SCREEN_BUFFER_INFO cbsi;
+        if (GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &cbsi)) {
+            *cursorX = cbsi.dwCursorPosition.X;
+            *cursorY = cbsi.dwCursorPosition.Y;
+            return true;
+        }
+        else {
+            return false;
+        }
+    }
+    // The handle must have the GENERIC_READ access right
+    bool SetConsoleCursorPosition(short posX, short posY) {
+        COORD position;
+        position.X = posX;
+        position.Y = posY;
+        return SetConsoleCursorPosition(GetStdHandle(STD_OUTPUT_HANDLE), position);
     }
 
     // This is not a function, it's just a reference for me for when I want to do a message loop and I dont remember...
@@ -1141,6 +1160,7 @@ namespace Win32 {
 #include "resources.h"
 int WinMain(HINSTANCE hInst, HINSTANCE hInstPrev, PSTR cmdline, int cmdshow) {
     bool isExternalConsole = Win32::GetConsole();
+    Win32::Print("\n\n");
     const char windowClassName[] = "windowClass";
     auto windowClass = Win32::MakeWindowClass(windowClassName, Win32::BasicWindowProc, hInst);
     auto windowHandle = Win32::MakeWindow(windowClassName, "MyWindow!", hInst, cmdshow);
@@ -1175,6 +1195,11 @@ int WinMain(HINSTANCE hInst, HINSTANCE hInstPrev, PSTR cmdline, int cmdshow) {
     r.LoadShader(vshader, vshader_size, Win32::GL::Renderer::shaderType::VertexShader);
     r.GenerateShaderProgram();
     bool running = true;
+    
+    unsigned long long cpuFrequencySeconds;
+    unsigned long long cpuCounter;
+    Win32::GetCpuCounterAndFrequencySeconds(&cpuCounter, &cpuFrequencySeconds);
+    
     // Main loop
     while (running) {
         MSG msg;
@@ -1190,6 +1215,27 @@ int WinMain(HINSTANCE hInst, HINSTANCE hInstPrev, PSTR cmdline, int cmdshow) {
             }
         }
 
+        // Write ms and fps at the top of the console
+        static double ms;
+        static unsigned long long fps;
+        static short cursorX;
+        static short cursorY;
+        cpuCounter = Win32::GetTimeDifferenceMsAndFPS(cpuCounter, cpuFrequencySeconds, &ms, &fps);
+        if (!Win32::GetConsoleCursorPosition(&cursorX, &cursorY)) {
+            Win32::FormattedPrint("Error getting the console cursor position!");
+            running = false;
+        }
+        if (!Win32::SetConsoleCursorPosition(0, 0)) {
+            Win32::FormattedPrint("Error setting the console cursor position!");
+            running = false;
+        }
+        Win32::FormattedPrint("ms:  %f         \nfps: %d         ", ms, fps);
+        if (!Win32::SetConsoleCursorPosition(cursorX, cursorY)) {
+            Win32::FormattedPrint("Error setting the console cursor position!");
+            running = false;
+        }
+
+        // Update
         static int A = 0;
         static int B = 0;
         A++;
