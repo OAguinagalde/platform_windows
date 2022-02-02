@@ -654,7 +654,7 @@ namespace Win32 {
             GLfloat textureDimensions[2];
             unsigned long quadsToRender = 0;
 
-            GLuint textureObject = 0;
+            GLuint textureObject[2] = { 0, 1 };
             GLuint vertexArrayObject = 0;
             GLuint elementBufferObject = 0;
             GLuint vertexBufferObject = 0;
@@ -717,14 +717,24 @@ namespace Win32 {
                 GetErrors(__FUNCTION__);
             }
             
-            void LoadTexture(void* data, GLsizei w, GLsizei h) {
+            void LoadTexture(void* data, GLsizei w, GLsizei h, int textureSlot) {
                 textureDimensions[0] = w;
                 textureDimensions[1] = h;
-                glBindTexture(GL_TEXTURE_2D, textureObject);
+                glActiveTexture(GL_TEXTURE0 + textureSlot);
+                glBindTexture(GL_TEXTURE_2D, textureObject[textureSlot]);
                 glTexImage2D(GL_TEXTURE_2D, 0, 4, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
                 glBindTexture(GL_TEXTURE_2D, 0);
                 GetErrors(__FUNCTION__);
             }
+            
+            //void LoadTexture(void* data, GLsizei w, GLsizei h) {
+            //    textureDimensions[0] = w;
+            //    textureDimensions[1] = h;
+            //    glBindTexture(GL_TEXTURE_2D, textureObject);
+            //    glTexImage2D(GL_TEXTURE_2D, 0, 4, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
+            //    glBindTexture(GL_TEXTURE_2D, 0);
+            //    GetErrors(__FUNCTION__);
+            //}
 
             void Initialize() {
                 // Something about windows and framerates, dont remember, probably vertical sync
@@ -733,12 +743,18 @@ namespace Win32 {
                 // Configure textures
                 // Load them later with LoadTexture()
                 glEnable(GL_TEXTURE_2D);
-                glGenTextures(1, &textureObject);
-                glBindTexture(GL_TEXTURE_2D, textureObject);
-                glActiveTexture(GL_TEXTURE0);
+                glGenTextures(2, &textureObject[0]);
+                Win32::FormattedPrint("Texture 1: %d\nTexture 2: %d\n", textureObject[0], textureObject[1]);
+                glActiveTexture(GL_TEXTURE0 + 0);
+                glBindTexture(GL_TEXTURE_2D, textureObject[0]);
                 glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
                 glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-                glBindTexture(GL_TEXTURE_2D, 0);
+                glActiveTexture(GL_TEXTURE0 + 1);
+                glBindTexture(GL_TEXTURE_2D, textureObject[1]);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+                //glBindTexture(GL_TEXTURE_2D, 0);
+                //glActiveTexture(GL_TEXTURE0);
                 
                 // Configure Blending
                 glEnable(GL_BLEND);
@@ -787,7 +803,7 @@ namespace Win32 {
                 glBindBuffer(GL_ARRAY_BUFFER, 0);
             }
 
-            void Render(unsigned long clientWidth, unsigned long clientHeight, Color clearColor, HDC deviceContextHandle) {
+            void Render(unsigned long clientWidth, unsigned long clientHeight, Color clearColor, HDC deviceContextHandle, int texture) {
                 glViewport(0, 0, clientWidth, clientHeight);
                 glClearColor(clearColor.r, clearColor.g, clearColor.b, clearColor.a);
                 glClear(GL_COLOR_BUFFER_BIT);
@@ -804,7 +820,8 @@ namespace Win32 {
                 #undef ToColumnMajor
 
                 glBindVertexArray(vertexArrayObject);
-                glBindTexture(GL_TEXTURE_2D, textureObject);
+                glActiveTexture(GL_TEXTURE0 + texture);
+                glBindTexture(GL_TEXTURE_2D, textureObject[texture]);
                 glBindBuffer(GL_ARRAY_BUFFER, vertexBufferObject);
                 glBufferData(GL_ARRAY_BUFFER, sizeof(Vertex) * 4 * quadsToRender, vertexBuffer, GL_DYNAMIC_DRAW);
                 glUseProgram(shaderProgramObject);
@@ -814,7 +831,8 @@ namespace Win32 {
                 glUniform2fv(textureDimensionsUniformPosition, 1, textureDimensions);
                 glDrawElements(GL_TRIANGLES, quadsToRender * 6, GL_UNSIGNED_INT, 0);
                 glBindVertexArray(0);
-                glBindTexture(GL_TEXTURE_2D, 0);
+                //glBindTexture(GL_TEXTURE_2D, 0);
+                //glActiveTexture(GL_TEXTURE0);
                 glBindBuffer(GL_ARRAY_BUFFER, 0);
 
                 Win32::SwapPixelBuffers(deviceContextHandle);
@@ -1190,7 +1208,8 @@ int WinMain(HINSTANCE hInst, HINSTANCE hInstPrev, PSTR cmdline, int cmdshow) {
     using R = Renderer;
 
     r.Initialize();
-    r.LoadTexture((void*)texture_data, texture_width, texture_height);
+    r.LoadTexture((void*)texture_data, texture_width, texture_height, 0);
+    r.LoadTexture((void*)texture_font_data, texture_font_width, texture_font_height, 1);
     r.LoadShader(fshader, fshader_size, Win32::GL::Renderer::shaderType::FragmentShader);
     r.LoadShader(vshader, vshader_size, Win32::GL::Renderer::shaderType::VertexShader);
     r.GenerateShaderProgram();
@@ -1255,7 +1274,7 @@ int WinMain(HINSTANCE hInst, HINSTANCE hInstPrev, PSTR cmdline, int cmdshow) {
         r.AddQuad(myQuad);
         
         // TODO: Add Text!
-        r.Render(clientW, clientH, Win32::GL::Renderer::Color().White(), deviceContextHandle);
+        r.Render(clientW, clientH, Win32::GL::Renderer::Color().Black(), deviceContextHandle, 0);
         
         if (false && Win32::GL::GetErrors("Main Loop")) {
             Win32::Print("Exiting because there were gl errors!");
