@@ -53,9 +53,9 @@ typedef  unsigned long long uint64;
     #define assert(expression)
 #endif
 
-int abs(int value) {
-    return (value < 0) ? -value : value;
-}
+// int abs(int value) {
+//     return (value < 0) ? -value : value;
+// }
 
 // TODO: if parent process is in use for attached console (powershell or cmd) I'm not sure if changing the ConsoleMode might
 // break something
@@ -964,6 +964,17 @@ win32_ int WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, char* win32_cmd
             
             #define ToColumnMajor(v0,v1,v2,v3,v4,v5,v6,v7,v8,v9,v10,v11,v12,v13,v14,v15) v0,v4,v8,v12,v1,v5,v9,v13,v2,v6,v10,v14,v3,v7,v11,v15
 
+            // http://www.songho.ca/opengl/gl_projectionmatrix.html
+            // In order to have the origin (0, 0) on the top left corner
+            // and have Right = 1.0f and Bottom = 1.0f :
+            // Taking into account that the default fixed pipeline for OpenGL uses a
+            // projection of type Left = -1, Right = 1, Top = 1 and Bottom = -1
+            // First: Translate every point -1 units on X and Y. That way the projection will change like this:
+            // ==> Left = 0, Right = 2, Top = 2 and Bottom = 0
+            // Next multiply every (X, Y) by 2, that way we achieve something similar to having a projection like this:
+            // ==> Left = 0, Right = 1, Top = 1 and Bottom = 0
+            // Finally inverse the Y coordinate to have something like this:
+            // ==> Left = 0, Right = 1, Top = 0 and Bottom = 1
             GLfloat w = 2.0f/(float)win32_clientWidth;
             GLfloat h = 2.0f/(float)win32_clientHeight;
             GLfloat matrix_projection[] = { ToColumnMajor(
