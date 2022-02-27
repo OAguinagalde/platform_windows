@@ -1220,7 +1220,8 @@ int WinMain(HINSTANCE hInst, HINSTANCE hInstPrev, PSTR cmdline, int cmdshow) {
         static unsigned long long fps;
         static short cursorX;
         static short cursorY;
-        cpuCounter = Win32::GetTimeDifferenceMsAndFPS(cpuCounter, cpuFrequencySeconds, &ms, &fps);
+
+		cpuCounter = Win32::GetTimeDifferenceMsAndFPS(cpuCounter, cpuFrequencySeconds, &ms, &fps);
         if (!Win32::GetConsoleCursorPosition(&cursorX, &cursorY)) {
             Win32::FormattedPrint("Error getting the console cursor position!");
             running = false;
